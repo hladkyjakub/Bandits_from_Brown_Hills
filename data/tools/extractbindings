@@ -1,0 +1,54 @@
+#!/usr/bin/env python3
+#
+# Extract and format a list of bindings from a theme file.
+# Presently this generates a table suitable for wiki inclusion.
+
+import sys
+
+def report(binding, command):
+    "Reporter suitable for a wiki inclusion"
+    tabcolumn=-32
+    print(" %*s%s" % (tabcolumn, binding, command))
+
+def strip(st):
+    if st.startswith('"'):
+        st = st[1:-1]
+    return st
+
+
+in_keydef = False
+entry = {}
+for line in sys.stdin:
+    line=line.strip()
+    if line.startswith("#!"):
+        (key, explanation) = line.split("=")
+        report(key[3:], explanation)
+    elif line.startswith("#"):
+        continue
+    elif line == "[hotkey]":
+        in_keydef = True
+    elif in_keydef:
+        if line == "[/hotkey]":
+            binding = []
+            # Presently we ignore the Mac command key
+            for mod in ("ctrl", "alt", "shift"):
+                if mod in entry and entry[mod] == 'yes':
+                    binding.append(mod)
+            if entry.get("button", None) == "1":
+               binding.append("Left click")
+            elif entry.get("button", None) == "3":
+               binding.append("Right click")
+            if "key" in entry:
+                binding.append(strip(entry['key']))
+            report('-'.join(binding), strip(entry['command']))
+            in_keydef = False
+            entry.clear()
+        elif line == "{IF_APPLE_CMD_ELSE_CTRL}":
+            entry["ctrl"] = "yes"
+        else:
+            try:
+                (key, value) = line.split("=", 1)
+            except ValueError:
+                print("Malformed line: %s" % line, file=sys.stderr)
+                sys.exit(1)
+            entry[key] = value

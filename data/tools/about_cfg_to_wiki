@@ -1,0 +1,120 @@
+#!/usr/bin/env python3
+# encoding: utf-8
+#
+
+#
+# This must be run from the Wesnoth root directory.
+#
+# Run as:
+#
+# data/tools/about_cfg_to_wiki -w path_to_wesnoth_exe > about.wiki
+#
+# (-h option outputs help)
+
+import sys, re, glob
+
+import wesnoth.wmlparser3 as wmldata
+
+if __name__ == "__main__":
+    import argparse
+
+    argument_parser = argparse.ArgumentParser()
+    argument_parser.add_argument("-w", "--wesnoth",
+        help="Specify the wesnoth executable to use.")
+    args = argument_parser.parse_args()
+
+    files = ["data/core/about.cfg", "data/core/about_i18n.cfg"]
+    files.extend(glob.glob("data/campaigns/*/_main.cfg"))
+
+    if not args.wesnoth:
+        args.wesnoth = "./wesnoth"
+
+    # Parse WML.
+    class Section:
+        def __init__(self, title):
+            self.title = title
+            self.lines = []
+
+    chapters = []
+
+    for arg in files:
+        sections = []
+        wml_parser = wmldata.Parser(args.wesnoth, None, None)
+        wml_parser.parse_file(arg)
+        wml = wml_parser
+        if not wml.get_all(tag="about"):
+            wml = wml.get_all(tag="campaign")
+            if not wml or not wml[0].get_all(tag="about"):
+                print("No about section found in %s\n" % arg,
+                      file=sys.stderr)
+                continue
+            wml = wml[0]
+        for about in wml.get_all(tag="about"):
+            section = Section(about.get_text_val("title"))
+            for entry in about.get_all(tag="entry"):
+                name = entry.get_text_val("name")
+                comment = entry.get_text_val("comment", "")
+                wikiuser = entry.get_text_val("wikiuser", "")
+                email = entry.get_text_val("email", "")
+                # Mask email names from spammers
+                email = email.replace("@", "&#x40;").replace(".", "&#x2E;")
+                # Interpret our local conventions for obfuscating in repo files
+                email = email.replace("_AT_", "&#x40;").replace("_DOT_", "&#x2E;")
+                section.lines.append((name, comment, wikiuser, email))
+            if section.title:
+                sections.append(section)
+        chapters.append((arg, sections))
+
+    # Output.
+    print("""
+<div class="tright"> __TOC__ </div>
+__NOEDITSECTION__
+In July 2003, '''David White''' released the first version of Wesnoth. Since
+then, many people have joined the project, contributing in very different ways.
+
+To make any changes to this list, please modify
+<code class="noframe">about.cfg</code> in the repo or ask any developer to do
+it for you.
+""".lstrip())
+    for path, sections in chapters:
+        if path == "data/core/about.cfg":
+            print("== Core Contributors ==")
+        elif path == "data/core/about_i18n.cfg":
+            print("== Translators ==")
+        else:
+            slash1 = path.rfind("/")
+            slash2 = path.rfind("/", 0, slash1)
+            beautified = path[slash2 + 1:slash1]
+            beautified = beautified.replace("_", " ")
+            beautified = beautified[0].upper() + beautified[1:]
+            print("== %s ==" % beautified)
+        for section in sections:
+            print("=== %s ===" % section.title)
+            for name, comment, wikiuser, email in section.lines:
+                if name in ("*", "•"):
+                    print("<hr style='clear:none'>")
+                    continue
+                if comment:
+                    comment = " &#8212; " + comment
+                if wikiuser:
+                    # If a wiki user is given, the nickname is turned into a
+                    # wiki link, or else the whole name.
+                    if "(" in name:
+                        name = re.sub(r"\((.*)\)", "([[User:%s|\\1]])" % wikiuser, name)
+                    else:
+                        # The whole name is turned into a link, but also an
+                        # email is given - in this case add an extra link.
+                        if email:
+                            name += " ([[User:%s|%s]])" % (wikiuser, wikiuser)
+                        else:
+                            name = "[[User:%s|%s]]" % (wikiuser, name)
+                if email:
+                    if "(" in name:
+                        name, nick = name.split("(", 1)
+                        name = name.strip()
+                        name = "[mailto:%s %s] (%s" % (email, name, nick)
+                    else:
+                        name = "[mailto:%s %s]" % (email, name)
+                print("* %s%s" % (name, comment))
+
+    print("""[[Category:Generated]]""")

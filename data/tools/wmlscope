@@ -1,0 +1,571 @@
+#!/usr/bin/env python3
+# encoding: utf-8
+#
+# wmlscope -- generate reports on WML macro and resource usage
+#
+# By Eric S. Raymond, April 2007.
+#
+# This tool cross-references macro definitions with macro calls, and
+# resource (sound or image) files with uses of the resources in WML.
+# and generates various useful reports from such cross-references.
+# It also checks actual macro arguments against types implied by the formals
+#
+# (Most of the work is done by a cross-referencer class that is also
+# used in other tools.)
+#
+# It takes a list of directories as arguments; if none is given, it
+# behaves as though the current directory had been specified as a
+# single argument.  Each directory is treated as a separate domain for
+# macro and resource visibility purposes.
+#
+# There are two kinds of namespace, exporting and non-exporting.
+# Exporting namespaces make all their resources and macro names
+# globally visible.  You can make a namespace exporting by embedding
+# a comment like this in it:
+#
+#     # wmlscope: export=yes
+#
+# Wesnoth core data is an exporting namespace.  Campaigns are non-exporting;
+# they should contain the declaration
+#
+#     # wmlscope: export=no
+#
+# somewhere.  wmlscope will complain when it sees a namespace with no export
+# property, then treat it as non-exporting.
+#
+# You can tell wmlscope to ignore stretches of config files
+# with the following magic comments:
+#
+#     # wmlscope: start ignoring
+#     # wmlscope: stop ignoring
+#
+# Similarly, you can tell wmlscope to ignore multiple or duplicate macro
+# definitions in a range of lines with the following magic comments:
+#
+#     # wmlscope: start conditionals
+#     # wmlscope: stop conditionals
+#
+# The following magic comment:
+#
+#     # prune FOOBAR
+#
+# will cause wmlscope to forget about all but one of the definitions of FOOBAR
+# it has seen.  This will be useful mainly for symbols that have different
+# definitions enabled by an #ifdef.
+#
+# Due to a preprocessor limitation, inline macros cannot contain a documentation
+# string. If you need to document these macros in the HTML macro reference, you
+# can use the following directive:
+#
+#     # wmlscope: docstring FOOBAR
+#
+# The docstring for the FOOBAR macro will be collected until a non-comment line,
+# a #define or another # wmlscope: docstring are found. External docstrings
+# *must* be defined before the macro they're referring to; defining two or more
+# external docstrings keeps only the most recent one, but having both an
+# external and an internal docstring is allowed (in this case, the internal one
+# will be appended to the external one in the macro reference).
+#
+# This tool does catch one kind of implicit reference: if an attack name
+# is specified but no icon is given, the attack icon will default to
+# a name generated from the attack name.  This behavior can be suppressed
+# by adding a magic comment containing the string "no-icon" to the name= line.
+#
+# The checking done by this tool has a couple of flaws:
+#
+# (1) It doesn't actually evaluate file inclusions.  Instead, any
+# macro definition satisfies any macro call made under the same
+# directory.  Exception: when an #undef is detected, the macro is
+# tagged local and not visible outside the span of lines where it's
+# defined.
+#
+# (2) It doesn't read [binary_path] tags, as this would require
+# implementing a WML parser.  Instead, it assumes that a resource-file
+# reference can be satisfied by any matching image file from anywhere
+# in the same directory it came from.  The resources under the *first*
+# directory argument (only) are visible everywhere.
+#
+# (3) A reference with embedded {}s in a macro will have the macro's
+# formal args substituted in at WML evaluation time.  Instead, this
+# tool treats each {} as a .* wildcard and considers the reference to
+# match *every* resource filename that matches that pattern.  Under
+# appropriate circumstances this might report a resource filename
+# statically matching the pattern as having been referenced even
+# though none of the actual macro calls would actually generate it.
+#
+# Problems (1) and (2) imply that this tool might conceivably report
+# that a reference has been satisfied when under actual
+# WML-interpreter rules it has not.
+#
+# The reporting format is compatible with GNU Emacs compile mode.
+#
+# For debugging purposes, an in-line comment of the form
+#
+#     # wmlscope: warnlevel NNN
+#
+# sets the warning level.
+
+import sys, os, time, re, argparse, hashlib, glob, codecs
+from wesnoth.wmltools3 import *
+from wesnoth import version
+
+def interpret(lines, css):
+    "Interpret the ! convention for .cfg comments."
+    inlisting = False
+    outstr = '<p class="%s">' % css
+    for line in lines:
+        line = line.strip()
+        if inlisting:
+            if line and line[0] != '!':
+                outstr += "</pre>\n<p>"
+                inlisting = False
+        else:
+            if not line:
+                outstr += "</p><p>"
+                continue
+            if line[0] == '!':
+                outstr += "</p>\n<pre class='listing'>"
+                inlisting = True
+                bracketdepth = curlydepth = 0
+        line = line.replace("<", "&lt;").replace(">", "&gt;").replace("&", "&amp;")
+        if inlisting:
+            outstr += line[1:] + "\n"
+        else:
+            outstr += line + "\n"
+    if not inlisting:
+        outstr += "</p>\n"
+    else:
+        outstr += "</pre>\n"
+    outstr = outstr.replace("<p></p>", "")
+    outstr = outstr.replace("\n\n</pre>", "\n</pre>")
+    return outstr
+
+class CrossRefLister(CrossRef):
+    "Cross-reference generator with reporting functions"
+    def xrefdump(self, pred=None):
+        "Report resolved macro references."
+        for name in sorted(self.xref.keys()):
+            for defn in self.xref[name]:
+                if pred and not pred(name, defn):
+                    continue
+                if defn.undef:
+                    type_ = "local"
+                else:
+                    type_ = "global"
+                nrefs = len(defn.references)
+                if nrefs == 0:
+                    print("%s: %s macro %s is unused" % (defn, type_, name))
+                else:
+                    print("%s: %s macro %s is used in %d files:" % (defn, type_, name, nrefs))
+                defn.dump_references()
+        for name in sorted(self.fileref.keys()):
+            defloc = self.fileref[name]
+            if pred and not pred(name, defloc):
+                continue
+            nrefs = len(defloc.references)
+            if nrefs == 0:
+                print("Resource %s is unused" % defloc)
+            else:
+                print("Resource %s is used in %d files:" % (defloc, nrefs))
+            defloc.dump_references()
+
+    def unresdump(self):
+        "Report unresolved references, arity mismatches, duplicate unit IDs."
+        # First the unresolved references
+        if len(self.unresolved) == 0 and len(self.missing) == 0:
+            print("# No unresolved references")
+        else:
+            print("# Unresolved references:")
+            #print(list(self.fileref.keys()))
+            for (name, reference) in self.unresolved + self.missing:
+                print("%s: Unresolved reference -> %s" % (reference, name))
+        mismatched = []
+        for name in sorted(self.xref.keys()):
+            for defn in self.xref[name]:
+                m = defn.mismatches()
+                if m.references:
+                    mismatched.append((name, m))
+        # Then the type mismatches
+        if mismatched:
+            print("# Mismatched references:")
+            for (n, m) in mismatched:
+                print("%s: macro %s(%s%s%s) has mismatches:" % (m,
+                                                                n,
+                                                                ", ".join(["{}={}".format(x, formaltype(x)) for x in m.args]),
+                                                                " " if m.optional_args else "",
+                                                                ", ".join(["{}=optional {}".format(x, formaltype(x)) for x in m.optional_args])))
+                for (file, refs) in m.references.items():
+                    for (ln, args, optional_args) in refs:
+                        print('"%s", line %d: %s(%s%s%s) with signature (%s%s%s)' %
+                              (file,
+                               ln,
+                               n,
+                               ", ".join(args),
+                               ", " if optional_args else "",
+                               ", ".join(optional_args.values()),
+                               ", ".join(["{}={}".format(f, actualtype(a)) for f,a in zip(m.args, args)]),
+                               ", " if optional_args else "",
+                               ", ".join(["{}=optional {}".format(f, actualtype(oa)) for f,oa in optional_args.items()])))
+
+    def deprecateddump(self):
+        "Report calls to deprecated macros"
+        if not self.deprecated:
+            print("# No calls to deprecated macros")
+            return
+        print("# Calls to deprecated macros:")
+        for (name, reference) in self.deprecated:
+            print("%s: Deprecated macro call -> %s" % (reference, name))
+
+    def incorrectlysized(self):
+        "Report incorrectly sized images that cannot be safely used for their intended purpose"
+        for (namespace, filename) in xref.filelist.generator():
+            if filename.endswith(".png"):
+                fn_list = filename.split(os.sep)
+                try:
+                    with open(filename, mode="rb") as image:
+                        png_header = image.read(16)
+                        w = image.read(4)
+                        h = image.read(4)
+                    # some explanations for those that don't want to read the PNG documentation
+                    # all valid PNG files always start with the same 16 bytes
+                    # the first 8 are the 'magic number', which is 89 50 4E 47 0D 0A 1A 0A
+                    # notice that '50 4E 47' is 'PNG' in ASCII
+                    # the next 4 are the chunk size, then the next 4 are the chunk type
+                    # the IHDR chunk is always the first one in any PNG file
+                    # and has always a length of 13 bytes (0D == 13)
+                    if png_header != b"\x89PNG\r\n\x1a\n\x00\x00\x00\x0dIHDR":
+                        print("%s is not a valid PNG file" % filename, file=sys.stderr)
+                        continue
+                    # after the common part to all PNG files,
+                    # the next 4 bytes are the image width, and the next 4 are the image height
+                    # said bytes are placed in big-endian order (most significant bytes come first)
+                    # we need to use some bitwise operations to convert them as a single integer
+                    # also we don't need the remaining 5 bytes of the IHDR chunk
+                    # Py3 reads the file as bytes, and each byte is already an int
+                    # this is why, unlike Python 2, ord() isn't needed
+                    x = w[0] << 24 | w[1] << 16 | w[2] << 8 | w[3]
+                    y = h[0] << 24 | h[1] << 16 | h[2] << 8 | h[3]
+                    # these checks rely on add-ons that place files following mainline conventions
+                    # I'm aware that this may not always be the case
+                    # but the alternative will be implementing a more sophisticated check in wmllint
+                    if "images" in fn_list:
+                        expected_size = None
+                        if "attacks" in fn_list or "icons" in fn_list:
+                            # images used in attack dialogs should be 60x60
+                            if x != 60 or y != 60:
+                                expected_size = (60,60)
+                        elif "flags" in fn_list:
+                            # flags should be 72x72, but their icons should be 24 x 16
+                            if "icon" in os.path.split(filename)[1]:
+                                if x != 24 or y != 16:
+                                    expected_size = (24,16)
+                            else:
+                                if x != 72 or y != 72:
+                                    expected_size = (72,72)
+                        elif "items" in fn_list:
+                            # items should be 72x72
+                            if x != 72 or y != 72:
+                                expected_size = (72,72)
+                        if expected_size:
+                            print("%s: image is %d x %d, expected %d x %d" % (filename, x, y, expected_size[0], expected_size[1]))
+                except IOError:
+                    print("%s: unable to read file" % filename, file=sys.stderr)
+
+    def duplicates(self, exportonly):
+        "Dump duplicate unit IDs."
+        duplicate_latch = False
+        for (key, value) in self.unit_ids.items():
+            if len(value) > 1:
+                if exportonly and not [x for x in value if self.exports(x.namespace)]:
+                    continue
+                if not duplicate_latch:
+                    print("# Duplicate IDs")
+                    duplicate_latch = True
+                print("%s: occurs %d times as unit ID" % (key, len(value)))
+                for ref in value:
+                    print("%s: exported=%s" % (ref, self.exports(ref.namespace)))
+
+    def typelist(self, branch):
+        "Dump actual and formal arguments for macros in specified file"
+        already_seen = []
+        for name in sorted(self.xref.keys()):
+            for defn in self.xref[name]:
+                for (filename, refs) in defn.references.items():
+                    if filename.endswith(branch):
+                        if name not in already_seen:
+                            already_seen.append(name)
+                            print("%s: macro %s(%s%s%s):" %
+                                  (defn,
+                                   name,
+                                   ", ".join(["{}={}".format(x, formaltype(x)) for x in defn.args]),
+                                   ", " if defn.optional_args else "",
+                                   ", ".join(["{}=optional {}".format(x, formaltype(x)) for x in defn.optional_args])))
+                        for (ln, args, optional_args) in refs:
+                            print('"%s", line %d: %s(%s%s%s) with signature (%s%s%s)' %
+                                  (filename,
+                                   ln,
+                                   name,
+                                   ", ".join(args),
+                                   ", " if optional_args else "",
+                                   ", ".join(optional_args.values()),
+                                   ", ".join(["{}={}".format(f, actualtype(a)) for f,a in zip(defn.args, args)]),
+                                   ", " if optional_args else "",
+                                   ", ".join(["{}={}".format(f, actualtype(oa)) for f,oa in optional_args.items()])))
+
+    def deflist(self, pred=None):
+        "List all resource definitions."
+        for name in sorted(self.xref.keys()):
+            for defn in self.xref[name]:
+                if not pred or pred(name, defn):
+                    print("macro",
+                          name,
+                          " ".join(["{}={}".format(x, formaltype(x)) for x in defn.args]),
+                          " ".join(["{}=optional {}".format(x, formaltype(x)) for x in defn.optional_args]))
+        for name in sorted(self.fileref.keys()):
+            defloc = self.fileref[name]
+            if not pred or pred(name, defloc):
+                print("resource", name)
+        for uid in sorted(self.unit_ids.keys()):
+            print("unit", uid)
+
+    def unchecked(self, fp):
+        "List all macro definitions with untyped formals."
+        unchecked = []
+        defcount = 0
+        callcount = 0
+        unresolvedcount = 0
+        for name in self.xref.keys():
+            for defn in self.xref[name]:
+                defcount += 1
+                callcount += len(defn.references)
+                if None in map(formaltype, defn.args):
+                    for (i, d) in enumerate(defn.args):
+                        if formaltype(d) is None:
+                            defn.args[i] += "?"
+                    unchecked.append((name, defn))
+                    unresolvedcount += len(defn.references)
+        if unchecked:
+            print("# %d of %d (%.02f%%) macro definitions and %d of %d calls (%.02f%%) have untyped required formals:" \
+                  % (len(unchecked),
+                     defcount,
+                     ((100 * len(unchecked)) / defcount),
+                     unresolvedcount,
+                     callcount,
+                     ((100 * unresolvedcount) / callcount)))
+            # sort by checking the 2nd element in the tuple
+            unchecked.sort(key=lambda element: element[1])
+            for (name, defn) in unchecked:
+                print("%s: %s(%s)" % (defn, name, ", ".join(defn.args),))
+
+    def extracthelp(self, pref, fp):
+        "Deliver all macro help comments in HTML form."
+        # Bug: finds only the first definition of each macro in scope.
+        # macros starting with INTERNAL: are only for internal use
+        # and aren't supposed to be reported in the macro reference
+        doclist = [x for x in self.xref.keys() if not x.startswith("INTERNAL:")]
+        doclist.sort(key=lambda element: self.xref[element][0])
+        outstr = ""
+        filename = None
+        filenamelist = []
+        counted = 0
+        for name in doclist:
+            entry = self.xref[name][0]
+            if entry.filename != filename:
+                if counted:
+                    outstr += "</dl>\n"
+                counted += 1
+                filename = entry.filename
+                if filename.startswith(pref):
+                    displayname = filename[len(pref):]
+                else:
+                    displayname = filename
+                outstr += "<p class='toplink'>[ <a href='#content'>top</a> ]</p>\n"
+                outstr += "<h2 id='file:" + displayname + "' class='file_header'>From file: "
+                outstr += "<code class='noframe'>" + displayname + "</code></h2>\n"
+                filenamelist.append(displayname)
+                hdr = []
+                with codecs.open(filename, "r", "utf8") as dfp:
+                    for line in dfp:
+                        line = line.lstrip()
+                        if line and line.startswith("#textdomain"):
+                            continue
+                        if line and line[0] == '#' and (not line.startswith("#define")):
+                            hdr.append(line[1:])
+                        else:
+                            break
+                if hdr:
+                    outstr += interpret(hdr, "file_explanation")
+                outstr += "<dl>\n"
+            if entry.docstring:
+                lines = entry.docstring.split("\n")
+                header = lines.pop(0).split()
+                if lines and not lines[-1]: # Ignore trailing blank lines
+                    lines.pop()
+                outstr += "\n<dt id='" + header[0] + "'>\n<code class='noframe'>"
+                outstr += "<span class='macro-name'>" + header[0] + "</span>"
+                if header[1:]:
+                    outstr += " <var class='macro-formals'>"+" ".join(header[1:])+"</var>"
+                if entry.optional_args:
+                    outstr += " Optional arguments: <var class='macro-formals'>" + " ".join(entry.optional_args) + "</var>"
+                outstr += "\n</code></dt>\n"
+                outstr += "<dd>\n"
+                if entry.deprecated:
+                    outstr += "<p class='macro-deprecated'><strong>Deprecated macro.</strong>"
+                    outstr += " <em>Deprecation level: " + entry.deprecation_level + "."
+                    if entry.removal_version:
+                        outstr += " Scheduled for removal in " + entry.removal_version + "."
+                    outstr += "</em></p>\n"
+                if lines:
+                    outstr += interpret(lines, "macro-explanation")
+                else:
+                    # Warn in output about definitions without a docstring
+                    outstr += "<p class='macro-missing-docs'><em>No documentation available for this macro.</em></p>\n"
+                outstr += "</dd>\n"
+        outstr += "</dl>\n"
+        outstr += "<p class='toplink'>[ <a href='#content'>top</a> ]</p>\n"
+        linkheaderstr = "<p class='macro-ref-toc'>Documented files:</p><div class='filelist'><ul>"
+        for filename in filenamelist:
+            linkheaderstr += "<li><a href='#file:" + filename + "'>"
+            linkheaderstr += "<code class='noframe'>" + filename + "</code></a></li>"
+        linkheaderstr += "</ul></div>\n"
+        fp.write(linkheaderstr)
+        fp.write(outstr)
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(prog="wmlscope")
+    parser.add_argument("-c", "--crossreference", action="store_true",
+                        help="Report resolved macro references (implies -w 1)")
+    parser.add_argument("-C", "--collisions", action="store_true",
+                        help="Report duplicate resource files")
+    parser.add_argument("-d", "--definitions", action="store_true",
+                        help="Make definition list")
+    parser.add_argument("-e", "--exclude", action="append", default = [],
+                        help="Ignore files matching the specified regular expression")
+    parser.add_argument("-f", "--from", action="store", dest="from_", metavar="FROM", # from is a keyword
+                        help="Report only on things defined in files matching regexp")
+    parser.add_argument("-l", "--listfiles", action="store_true",
+                        help="List files that will be processed")
+    parser.add_argument("-r", "--refcount", action="store", type=int, # convert to int, defaults to None
+                        help="Report only on macros w/references in ddd files")
+    parser.add_argument("-t", "--typelist", action="store",
+                        help="List actual & formal argtypes for calls in fname")
+    parser.add_argument("-u", "--unresolved", action="store_true",
+                        help="Report unresolved macro references")
+    parser.add_argument("-w", "--warnlevel", action="store", type=int, default=0,
+                        help="Set to 1 to warn of duplicate macro definitions")
+    # this option was never listed before...
+    parser.add_argument("-p", "--progress", action="store_true",
+                        help="Show progress") # TODO: improve description
+    # no short options for these
+    parser.add_argument("--force-used", action="append", dest="forceused", default = [],
+                        help="Ignore refcount 0 on names matching regexp")
+    parser.add_argument("--extracthelp", action="store_true",
+                        help="Extract help from macro definition comments.")
+    parser.add_argument("--unchecked", action="store_true",
+                        help="Report all macros with untyped formals.")
+    parser.add_argument("directories", action="store", nargs="*",
+                        help="""Any number of directiories to check. If no
+directories are given, all files under the current directory are checked.""")
+    parser.add_argument("--version", action="version",
+                        version="%(prog)s " + version.as_string)
+    namespace = parser.parse_args()
+
+    try:
+        # Process options
+        crossreference = namespace.crossreference
+        collisions = namespace.collisions
+        definitions = namespace.definitions
+        exclude = namespace.exclude
+        from_restrict = namespace.from_
+        extracthelp = namespace.extracthelp
+        listfiles = namespace.listfiles
+        refcount_restrict = namespace.refcount
+        typelist = namespace.typelist
+        unresolved = namespace.unresolved
+        warnlevel = 1 if crossreference else namespace.warnlevel
+        forceused = namespace.forceused
+        unchecked = namespace.unchecked
+        progress = namespace.progress
+        arguments = namespace.directories # a remnant of getopt...
+
+        # in certain situations, Windows' command prompt appends a double quote
+        # to the command line parameters. This block takes care of this issue.
+        for i,arg in enumerate(arguments):
+            if arg.endswith('"'):
+                arguments[i] = arg[:-1]
+
+        forceused = "|".join(forceused)
+        if len(arguments):
+            dirpath = []
+            for arg in arguments:
+                globarg = glob.glob(arg)
+                for globbed in globarg:
+                    dirpath.append(globbed)
+        else:
+            dirpath = ['.']
+        if not extracthelp:
+            print("# Wmlscope reporting on %s" % time.ctime())
+            print("# Invocation: %s" % " ".join(sys.argv))
+            print("# Working directory: %s" % os.getcwd())
+            starttime = time.time()
+        xref = CrossRefLister(dirpath, "|".join(exclude), warnlevel, progress)
+        if not extracthelp:
+            print("#Cross-reference time: %d seconds" % (time.time()-starttime))
+        if extracthelp:
+            xref.extracthelp(dirpath[0], sys.stdout)
+        elif unchecked:
+            xref.unchecked(sys.stdout)
+        elif listfiles:
+            for (namespace, filename) in xref.filelist.generator():
+                print(filename)
+        if collisions:
+            collisions = []
+            for (namespace, filename) in xref.filelist.generator():
+                with open(filename, "rb") as ifp: # this one may be an image or a sound, so don't assume UTF8 encoding
+                    m = hashlib.md5()
+                    while True:
+                        chunk = ifp.read(1024) # read 1 KiB each time to avoid using too much memory
+                        if not chunk:
+                            break
+                        m.update(chunk)
+                    collisions.append(m.hexdigest()) # hexdigest can be easily printed, unlike digest
+            hashes = {}
+            # hash in Py3 is a builtin function, hence the underscore after the variable name
+            for (filename, hash_) in zip(xref.filelist.flatten(), collisions):
+                if hash_ in hashes:
+                    hashes[hash_].append(filename)
+                else:
+                    hashes[hash_]=[filename]
+            for (hash_, files) in hashes.items(): # items in Py3 is equivalent to iteritems in Py2
+                if len(files) > 1:
+                    print("%%\nPossible duplicated files with MD5 hash", hash_)
+                    for fn in files:
+                        print("->", fn)
+            xref.duplicates(exportonly=False)
+        elif typelist:
+            xref.typelist(typelist)
+        elif crossreference or definitions or listfiles or unresolved:
+            def predicate(name, defloc):
+                if from_restrict and not re.search(from_restrict, defloc.filename):
+                    return False
+                if refcount_restrict!=None \
+                       and len(defloc.references) != refcount_restrict \
+                       or (refcount_restrict == 0 and forceused and re.search(forceused, name)):
+                    return False
+                return True
+            if crossreference:
+                if xref.noxref:
+                    print("wmlscope: can't make cross-reference, input included a definitions file.", file=sys.stderr)
+                else:
+                    xref.xrefdump(predicate)
+            if definitions:
+                xref.deflist(predicate)
+            if unresolved:
+                xref.incorrectlysized()
+                xref.deprecateddump()
+                xref.unresdump()
+                xref.duplicates(exportonly=True)
+    except KeyboardInterrupt:
+        print("Aborted by pressing ctrl-c", file=sys.stderr)
+
+# wmlscope ends here

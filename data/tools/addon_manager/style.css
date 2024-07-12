@@ -1,0 +1,151 @@
+/*
+ * Wesnoth add-ons server web index stylesheet supplement for Wesmere
+ * <https://github.com/wesnoth/wesmere/>
+ */
+
+.centerbox,
+#content,
+#footer-content {
+	/* Need some extra space for the list to display in its full glory. */
+	max-width: 76em;
+}
+
+table#campaigns th {
+	text-align: left;
+}
+
+div.type-tooltip,
+div.desc-tooltip {
+	display: none;
+	text-align: left;
+}
+
+tbody td {
+	position: relative;
+}
+
+td:hover div.type-tooltip,
+td:hover div.desc-tooltip {
+	display:  block;
+	position: absolute;
+	left:     0;
+	top:      100%;
+	width:    16em;
+	padding:  0.3em 0.6em;
+	z-index:  1;
+
+	background-color: #e9dbc2; /* $wui-menu-bg      */
+	border: 1px solid #b48648; /* $wui-text-navlink */
+	box-shadow: 1px 1px 2px 0px rgba(0,0,0,0.2);
+	border-radius: 4px;
+}
+
+td:hover div.desc-tooltip {
+	width: 28em;
+}
+
+div.desc-tooltip pre {
+	border: none;
+	background: transparent;
+	white-space: pre-wrap;
+	word-wrap: break-word;
+	font: inherit;
+	margin: 0;
+	padding: 0;
+	max-height: none;
+}
+
+table.tablesorter {
+	width: 100%;
+	text-align: left;
+}
+
+table.tablesorter thead tr th, table.tablesorter tfoot tr th {
+	background: #e7d9c0; /* $glamdrol-darkbg */
+}
+
+/* SVG arrows taken and modified from MediaWiki's Vector skin resources */
+
+table.tablesorter thead tr .header {
+	background-image: url(bg.gif);
+	background-image: url('data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2222%22%20height%3D%2216%22%3E%3Cpath%20d%3D%22m%2015.502%2C8.001%20-5%2C5.001%20-5%2C-5.001%20z%22%20fill%3D%22%23888%22%2F%3E%3Cpath%20d%3D%22m%2015.502%2C7.002%20-5%2C-5.001%20-5%2C5.001%20z%22%20fill%3D%22%23888%22%2F%3E%3C%2Fsvg%3E');
+	background-repeat: no-repeat;
+	background-position: center right;
+	cursor: pointer;
+}
+
+table.tablesorter tbody td {
+	vertical-align: top;
+	background: #fffbf0; /* $glamdrol-bg */
+}
+
+table.tablesorter tbody tr:nth-child(even) td {
+	background: #f8f2e8; /* lighten($wesmere-page-bg, 4%) */
+}
+
+table.tablesorter thead tr .headerSortUp {
+	background-image: url(asc.gif);
+	background-image: url('data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2222%22%20height%3D%2216%22%3E%3Cpath%20d%3D%22M15.502%206.001l-5%205.001-5-5.001z%22%20fill%3D%22%23333333%22%2F%3E%3C%2Fsvg%3E');
+}
+
+table.tablesorter thead tr .headerSortDown {
+	background-image: url(desc.gif);
+	background-image: url('data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2222%22%20height%3D%2216%22%3E%3Cpath%20d%3D%22m%2015.502%2C11.002%20-5%2C-5.001%20-5%2C5.001%20z%22%20fill%3D%22%23333333%22%2F%3E%3C%2Fsvg%3E');
+}
+
+th.addon-icon {
+	width: 72px;
+	min-width: 72px;
+}
+
+th.addon-name {
+	width: 45%;
+}
+
+th.addon-size,
+th.addon-stats {
+	width: 10%;
+}
+
+th.addon-date,
+th.addon-locales {
+	width: 12%;
+}
+
+td.addon-type {
+	padding-top: 24px; /* a little bit more than 25% image height (72px) */
+}
+
+td.addon-icon {
+	text-align: center;
+}
+
+.addon-meta {
+	font-size: 0.9em;
+}
+
+.addon-meta-label {
+	color: #724f2e; /* $wui-border-dark */
+}
+
+.addon-download {
+	display: block;
+	float: right;
+	margin: 0 0 0.9em 0.9em;
+	text-align: center;
+}
+
+@media screen and (max-width: 699px) {
+	th.addon-icon {
+		min-width: 0;
+	}
+
+	.addon-download {
+		float: none;
+		margin: 0.3em 0.9em;
+	}
+
+	td.addon {
+		text-align: center;
+	}
+}
