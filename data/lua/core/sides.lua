@@ -17,6 +17,24 @@ if wesnoth.kernel_type() == "Game Lua Kernel" then
 	}
 	setmetatable(wesnoth.sides, sides_mt)
 
+	-- Iterate over sides matching a filter
+	---@param filter WML
+	---@return fun(state:table)
+	---@return table state
+	function wesnoth.sides.iter(filter)
+		local function f(s)
+			local i = s.i
+			while i < #wesnoth.sides do
+				i = i + 1
+				if filter == nil or wesnoth.sides.matches(i, filter) then
+					s.i = i
+					return wesnoth.sides[i], i
+				end
+			end
+		end
+		return f, { i = 0 }
+	end
+
 	-- Deprecated functions
 	function wesnoth.set_side_variable(side, var, val)
 		wesnoth.sides[side].variables[var] = val
@@ -24,9 +42,11 @@ if wesnoth.kernel_type() == "Game Lua Kernel" then
 	function wesnoth.get_side_variable(side, var)
 		return wesnoth.sides[side].variables[var]
 	end
-	function wesnoth.get_starting_location(side)
-		local side = side
-		if type(side) == 'number' then side = wesnoth.sides[side] end
+	function wesnoth.get_starting_location(side_num)
+		local side = side_num
+		if type(side) == 'number' then
+			side = wesnoth.sides[side]
+		end
 		return side.starting_location
 	end
 
@@ -36,14 +56,8 @@ if wesnoth.kernel_type() == "Game Lua Kernel" then
 				wesnoth.sides.override_shroud(side, {})
 			else
 				local ls = wesnoth.require "location_set"
-				local clear = ls.of_shroud_data(shroud)
-				shroud = ls.create()
-				for x,y in wesnoth.current.map:iter() do
-					if not clear(x,y) then
-						shroud:insert(x,y)
-					end
-				end
-				wesnoth.sides.place_shroud(side, shroud:to_pairs())
+				shroud = ls.of_shroud_data(shroud)
+				wesnoth.sides.place_shroud(side, (~shroud):to_pairs())
 			end
 		else
 			wesnoth.sides.place_shroud(side, shroud)

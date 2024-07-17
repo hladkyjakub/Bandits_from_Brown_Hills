@@ -15,13 +15,16 @@ function wesnoth.wml_actions.endlevel(cfg)
 
 	local end_text = cfg.end_text
 	local end_text_duration = cfg.end_text_duration
-	if end_text or end_text_duration then
-		wesnoth.set_end_campaign_text(end_text or "", end_text_duration)
+	if end_text then
+		wesnoth.scenario.end_text = end_text
+	end
+	if end_text_duration then
+		wesnoth.scenario.end_text_duration = end_text_duration
 	end
 
 	local end_credits = cfg.end_credits
 	if end_credits ~= nil then
-		wesnoth.set_end_campaign_credits(end_credits)
+		wesnoth.scenario.show_credits = end_credits
 	end
 
 	local side_results = {}

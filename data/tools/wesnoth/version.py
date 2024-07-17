@@ -1,9 +1,9 @@
 #! /usr/bin/env python3
 
 major = 1
-minor = 16
-release = 3
-dev_suffix = "" # either use "+dev", "-dev", "" (empty string) or None
+minor = 18
+release = 2
+dev_suffix = "+dev" # either use "+dev", "-dev", "" (empty string) or None
 
 as_string = "{}.{}.{}{}".format(major,
                                 minor,

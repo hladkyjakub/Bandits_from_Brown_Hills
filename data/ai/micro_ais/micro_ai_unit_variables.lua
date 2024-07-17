@@ -13,12 +13,12 @@
 -- sub-tables in WML format, but there is no need for that at this time.
 
 function wesnoth.custom_synced_commands.MAI_set_unit_variable(cfg)
-	local unit = wesnoth.units.find_on_map { id = cfg.id }[1]
-	local value = wml.get_child(cfg, "value")
-	unit.variables['micro_ai_' .. cfg.ai_id] = value
+    local unit = wesnoth.units.find_on_map { id = cfg.id }[1]
+    local value = wml.get_child(cfg, "value")
+    unit.variables['micro_ai_' .. cfg.ai_id] = value
 end
 
-function MAI_set_unit_variable(unit, ai_id, value)
+local function MAI_set_unit_variable(unit, ai_id, value)
     -- This is just a wrapper function for the synced command above, so that
     -- we don't need to duplicate the code for creating the cfg WML table.
     local cfg = {

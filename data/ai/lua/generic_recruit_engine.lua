@@ -1,3 +1,5 @@
+wesnoth.deprecated_message('ai/lua/generic_recruit_engine.lua', 3, '1.19', 'All its functionality has been moved to ai/lua/ca_recruit_rushers.lua which can now be used directly.')
+
 return {
     -- init parameters:
     -- ai_cas: an object reference to store the CAs and associated data
@@ -58,8 +60,9 @@ return {
             local regen_amount = 0
             if abilities then
                 for regen in wml.child_range(abilities, "regenerate") do
-                    if regen.value > regen_amount then
-                        regen_amount = regen.value
+                    local val = tonumber(regen.value) or 0
+                    if val > regen_amount then
+                        regen_amount = val
                     end
                 end
                 effective_hp = effective_hp + (regen_amount * effective_hp/30)
@@ -131,22 +134,22 @@ return {
                         -- Handle marksman and magical
                         mod = wml.get_child(special, 'chance_to_hit')
                         if mod then
-                            if mod.value then
+                            if tonumber(mod.value) then
                                 if mod.cumulative then
-                                    if mod.value > defense then
-                                        defense = mod.value
+                                    if tonumber(mod.value) > defense then
+                                        defense = tonumber(mod.value)
                                     end
                                 else
-                                    defense = mod.value
+                                    defense = tonumber(mod.value)
                                 end
-                            elseif mod.add then
-                                defense = defense + mod.add
-                            elseif mod.sub then
-                                defense = defense - mod.sub
-                            elseif mod.multiply then
-                                defense = defense * mod.multiply
-                            elseif mod.divide then
-                                defense = defense / mod.divide
+                            elseif tonumber(mod.add) then
+                                defense = defense + tonumber(mod.add)
+                            elseif tonumber(mod.sub) then
+                                defense = defense - tonumber(mod.sub)
+                            elseif tonumber(mod.multiply) then
+                                defense = defense * tonumber(mod.multiply)
+                            elseif tonumber(mod.divide) then
+                                defense = defense / tonumber(mod.divide)
                             end
                         end
 
@@ -156,17 +159,17 @@ return {
                             local special_multiplier = 1
                             local special_bonus = 0
 
-                            if mod.multiply then
-                                special_multiplier = special_multiplier*mod.multiply
+                            if tonumber(mod.multiply) then
+                                special_multiplier = special_multiplier * tonumber(mod.multiply)
                             end
-                            if mod.divide then
-                                special_multiplier = special_multiplier/mod.divide
+                            if tonumber(mod.divide) then
+                                special_multiplier = special_multiplier / tonumber(mod.divide)
                             end
-                            if mod.add then
-                                special_bonus = special_bonus+mod.add
+                            if tonumber(mod.add) then
+                                special_bonus = special_bonus + tonumber(mod.add)
                             end
-                            if mod.subtract then
-                                special_bonus = special_bonus-mod.subtract
+                            if tonumber(mod.subtract) then
+                                special_bonus = special_bonus - tonumber(mod.subtract)
                             end
 
                             if mod.backstab then
@@ -174,14 +177,14 @@ return {
                                 -- TODO: find out what actual probability of getting to backstab is
                                 damage_multiplier = damage_multiplier*(special_multiplier*0.5 + 0.5)
                                 damage_bonus = damage_bonus+(special_bonus*0.5)
-                                if mod.value then
-                                    weapon_damage = (weapon_damage+mod.value)/2
+                                if tonumber(mod.value) then
+                                    weapon_damage = (weapon_damage+tonumber(mod.value))/2
                                 end
                             else
                                 damage_multiplier = damage_multiplier*special_multiplier
                                 damage_bonus = damage_bonus+special_bonus
-                                if mod.value then
-                                    weapon_damage = mod.value
+                                if tonumber(mod.value) then
+                                    weapon_damage = tonumber(mod.value)
                                 end
                             end
                         end
@@ -487,7 +490,7 @@ return {
             for i, unit_type in ipairs(enemy_types) do
                 enemy_type_count = enemy_type_count + 1
                 local poison_vulnerable = false
-                for i, recruit_id in ipairs(wesnoth.sides[wesnoth.current.side].recruit) do
+                for j, recruit_id in ipairs(wesnoth.sides[wesnoth.current.side].recruit) do
                     local analysis = recruit_lib.analyze_enemy_unit(unit_type, recruit_id)
 
                     if not recruit_effectiveness[recruit_id] then
@@ -933,7 +936,7 @@ return {
                 -- If castle_switch CA makes the unit end up on a village, skip one village for the leader.
                 -- Also do so if the leader is not passive. Note that the castle_switch CA will also return zero
                 -- when the leader is passive, but not only in that case.
-                local ltv_score, skip_one_village = 0
+                local ltv_score, skip_one_village = 0, nil
                 if params.leader_takes_village then
                     ltv_score, skip_one_village = params.leader_takes_village(leader)
                 end

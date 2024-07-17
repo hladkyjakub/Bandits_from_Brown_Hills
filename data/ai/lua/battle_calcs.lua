@@ -1,4 +1,3 @@
-local H = wesnoth.require "helper"
 local AH = wesnoth.require "ai/lua/ai_helper.lua"
 local LS = wesnoth.require "location_set"
 local M = wesnoth.map
@@ -354,20 +353,20 @@ function battle_calcs.battle_outcome_coefficients(cfg, cache)
     -- This is so that they can be grouped by number of attacker hits/misses, for
     -- subsequent simplification
     -- The element value is number of times we get the given combination of hits/misses
-    local counts = {}
+    local counts1 = {}
     for _,count in ipairs(hit_miss_counts) do
         local i1 = count.hit_miss_counts[1]
         local i2 = count.hit_miss_counts[2]
         local i3 = count.hit_miss_counts[3]
         local i4 = count.hit_miss_counts[4]
-        if not counts[i1] then counts[i1] = {} end
-        if not counts[i1][i2] then counts[i1][i2] = {} end
-        if not counts[i1][i2][i3] then counts[i1][i2][i3] = {} end
-        counts[i1][i2][i3][i4] = (counts[i1][i2][i3][i4] or 0) + 1
+        if not counts1[i1] then counts1[i1] = {} end
+        if not counts1[i1][i2] then counts1[i1][i2] = {} end
+        if not counts1[i1][i2][i3] then counts1[i1][i2][i3] = {} end
+        counts1[i1][i2][i3][i4] = (counts1[i1][i2][i3][i4] or 0) + 1
     end
 
     local coeffs_def = {}
-    for am,v1 in pairs(counts) do  -- attacker miss count
+    for am,v1 in pairs(counts1) do  -- attacker miss count
         for ah,v2 in pairs(v1) do  -- attacker hit count
             -- Set up the exponent coefficients for attacker hits/misses
         local exp = {}  -- Array for an individual set of coefficients
@@ -415,20 +414,20 @@ function battle_calcs.battle_outcome_coefficients(cfg, cache)
 
     -- Now we do the same for the HP distribution of the attacker,
     -- which means everything needs to be sorted by defender hits
-    local counts = {}
+    local counts2 = {}
     for _,count in ipairs(hit_miss_counts) do
     local i1 = count.hit_miss_counts[3] -- note that the order here is different from above
         local i2 = count.hit_miss_counts[4]
         local i3 = count.hit_miss_counts[1]
     local i4 = count.hit_miss_counts[2]
-        if not counts[i1] then counts[i1] = {} end
-        if not counts[i1][i2] then counts[i1][i2] = {} end
-        if not counts[i1][i2][i3] then counts[i1][i2][i3] = {} end
-        counts[i1][i2][i3][i4] = (counts[i1][i2][i3][i4] or 0) + 1
+        if not counts2[i1] then counts2[i1] = {} end
+        if not counts2[i1][i2] then counts2[i1][i2] = {} end
+        if not counts2[i1][i2][i3] then counts2[i1][i2][i3] = {} end
+        counts2[i1][i2][i3][i4] = (counts2[i1][i2][i3][i4] or 0) + 1
     end
 
     local coeffs_att = {}
-    for dm,v1 in pairs(counts) do  -- defender miss count
+    for dm,v1 in pairs(counts2) do  -- defender miss count
         for dh,v2 in pairs(v1) do  -- defender hit count
             -- Set up the exponent coefficients for attacker hits/misses
             local exp = {}  -- Array for an individual set of coefficients
@@ -476,25 +475,25 @@ function battle_calcs.battle_outcome_coefficients(cfg, cache)
 
     -- The probability for the number of hits with the most terms can be skipped
     -- and 1-sum(other_terms) can be used instead. Set a flag for which term to skip
-    local max_number, biggest_equation = 0, -1
+    local max_number1, biggest_equation1 = 0, -1
     for hits,v in pairs(coeffs_att) do
         local number = 0
         for _,c in pairs(v) do number = number + 1 end
-        if (number > max_number) then
-            max_number, biggest_equation = number, hits
+        if (number > max_number1) then
+            max_number1, biggest_equation1 = number, hits
         end
     end
-    coeffs_att[biggest_equation].skip = true
+    coeffs_att[biggest_equation1].skip = true
 
-    local max_number, biggest_equation = 0, -1
+    local max_number2, biggest_equation2 = 0, -1
     for hits,v in pairs(coeffs_def) do
         local number = 0
         for _,c in pairs(v) do number = number + 1 end
-        if (number > max_number) then
-            max_number, biggest_equation = number, hits
+        if (number > max_number2) then
+            max_number2, biggest_equation2 = number, hits
         end
     end
-    coeffs_def[biggest_equation].skip = true
+    coeffs_def[biggest_equation2].skip = true
 
     if cache then cache[cind] = { coeffs_att = coeffs_att, coeffs_def = coeffs_def } end
 
@@ -670,6 +669,16 @@ function battle_calcs.battle_outcome(attacker, defender, cfg, cache)
         def_strikes = math.floor(def_strikes * defender.hitpoints / defender.max_hitpoints)
     end
 
+    -- At around 15 combined strikes, wesnoth.simulate_combat becomes faster
+    if (att_strikes + def_strikes > 14) then
+        if (def_weapon == 0) then def_weapon = nil end
+        if (att_weapon == 0) then
+            return wesnoth.simulate_combat(attacker, defender, def_weapon)
+        else
+            return wesnoth.simulate_combat(attacker, att_weapon, defender, def_weapon)
+        end
+    end
+
     -- Maximum number of hits that either unit can survive
     local att_max_hits = math.floor((attacker.hitpoints - 1) / def_damage)
     if (att_max_hits > def_strikes) then att_max_hits = def_strikes end
@@ -693,11 +702,11 @@ function battle_calcs.battle_outcome(attacker, defender, cfg, cache)
     local def_firstrike = false
     if def_attack and def_attack.firststrike then def_firstrike = true end
 
-    local cfg = {
+    local att_def_cfg = {
         att = { strikes = att_strikes, max_hits = att_max_hits, firststrike = att_attack.firststrike },
         def = { strikes = def_strikes, max_hits = def_max_hits, firststrike = def_firstrike }
     }
-    local att_coeffs, def_coeffs = battle_calcs.battle_outcome_coefficients(cfg, cache)
+    local att_coeffs, def_coeffs = battle_calcs.battle_outcome_coefficients(att_def_cfg, cache)
 
     -- And multiply out the factors
     -- Note that att_hit_prob, def_hit_prob need to be in that order for both calls
@@ -799,36 +808,36 @@ function battle_calcs.attack_rating(attacker, defender, dst, cfg, cache)
     -- It is multiplied by unit cost later, to get a gold equivalent value
 
     -- Average damage to unit is negative rating
-    local damage = attacker.hitpoints - att_stats.average_hp
+    local att_damage = attacker.hitpoints - att_stats.average_hp
     -- Count poisoned as additional damage done by poison times probability of being poisoned
     if (att_stats.poisoned ~= 0) then
-        damage = damage + wesnoth.game_config.poison_amount * (att_stats.poisoned - att_stats.hp_chance[0])
+        att_damage = att_damage + wesnoth.game_config.poison_amount * (att_stats.poisoned - att_stats.hp_chance[0])
     end
     -- Count slowed as additional 6 HP damage times probability of being slowed
     if (att_stats.slowed ~= 0) then
-        damage = damage + 6 * (att_stats.slowed - att_stats.hp_chance[0])
+        att_damage = att_damage + 6 * (att_stats.slowed - att_stats.hp_chance[0])
     end
 
     local map = wesnoth.current.map
 
     -- If attack is from a healing location, count that as slightly more than the healing amount
-    damage = damage - 1.25 * wesnoth.terrain_types[map[dst]].healing
+    att_damage = att_damage - 1.25 * wesnoth.terrain_types[map[dst]].healing
 
     -- Equivalently, if attack is adjacent to an unoccupied healing location, that's bad
-    for xa,ya in H.adjacent_tiles(dst[1], dst[2]) do
+    for xa,ya in wesnoth.current.map:iter_adjacent(dst) do
         local healing = wesnoth.terrain_types[map[{xa, ya}]].healing
         if (healing > 0) and (not wesnoth.units.get(xa, ya)) then
-            damage = damage + 1.25 * healing
+            att_damage = att_damage + 1.25 * healing
         end
     end
 
-    if (damage < 0) then damage = 0 end
+    if (att_damage < 0) then att_damage = 0 end
 
     -- Fraction damage (= fractional value of the unit)
-    local value_fraction = - damage / attacker.max_hitpoints
+    local att_value_fraction = - att_damage / attacker.max_hitpoints
 
     -- Additional, subtract the chance to die, in order to (de)emphasize units that might die
-    value_fraction = value_fraction - att_stats.hp_chance[0]
+    att_value_fraction = att_value_fraction - att_stats.hp_chance[0]
 
     -- In addition, potentially leveling up in this attack is a huge bonus,
     -- proportional to the chance of it happening and the chance of not dying itself
@@ -842,40 +851,40 @@ function battle_calcs.attack_rating(attacker, defender, dst, cfg, cache)
             level_bonus = (1. - att_stats.hp_chance[0]) * def_stats.hp_chance[0]
         end
     end
-    value_fraction = value_fraction + level_bonus * level_weight
+    att_value_fraction = att_value_fraction + level_bonus * level_weight
 
 
     -- Now convert this into gold-equivalent value
     local attacker_value = attacker.cost
 
     -- Being closer to leveling is good (this makes AI prefer units with lots of XP)
-    local xp_bonus = attacker.experience / attacker.max_experience
-    attacker_value = attacker_value * (1. + xp_bonus * xp_weight)
+    local att_xp_bonus = attacker.experience / attacker.max_experience
+    attacker_value = attacker_value * (1. + att_xp_bonus * xp_weight)
 
-    local attacker_rating = value_fraction * attacker_value
+    local attacker_rating = att_value_fraction * attacker_value
 
     ------ Now (most of) the same for the defender ------
     -- Average damage to defender is positive rating
-    local damage = defender.hitpoints - def_stats.average_hp
+    local def_damage = defender.hitpoints - def_stats.average_hp
     -- Count poisoned as additional damage done by poison times probability of being poisoned
     if (def_stats.poisoned ~= 0) then
-        damage = damage + wesnoth.game_config.poison_amount * (def_stats.poisoned - def_stats.hp_chance[0])
+        def_damage = def_damage + wesnoth.game_config.poison_amount * (def_stats.poisoned - def_stats.hp_chance[0])
     end
     -- Count slowed as additional 6 HP damage times probability of being slowed
     if (def_stats.slowed ~= 0) then
-        damage = damage + 6 * (def_stats.slowed - def_stats.hp_chance[0])
+        def_damage = def_damage + 6 * (def_stats.slowed - def_stats.hp_chance[0])
     end
 
     -- If defender is on a healing location, count that as slightly more than the healing amount
-    damage = damage - 1.25 * wesnoth.terrain_types[map[defender]].healing
+    def_damage = def_damage - 1.25 * wesnoth.terrain_types[map[defender]].healing
 
-    if (damage < 0) then damage = 0. end
+    if (def_damage < 0) then damage = 0. end
 
     -- Fraction damage (= fractional value of the unit)
-    local value_fraction = damage / defender.max_hitpoints
+    local def_value_fraction = def_damage / defender.max_hitpoints
 
     -- Additional, add the chance to kill, in order to emphasize enemies we might be able to kill
-    value_fraction = value_fraction + def_stats.hp_chance[0]
+    def_value_fraction = def_value_fraction + def_stats.hp_chance[0]
 
     -- In addition, the defender potentially leveling up in this attack is a huge penalty,
     -- proportional to the chance of it happening and the chance of not dying itself
@@ -889,7 +898,7 @@ function battle_calcs.attack_rating(attacker, defender, dst, cfg, cache)
             defender_level_penalty = (1. - def_stats.hp_chance[0]) * att_stats.hp_chance[0]
         end
     end
-    value_fraction = value_fraction - defender_level_penalty * defender_level_weight
+    def_value_fraction = def_value_fraction - defender_level_penalty * defender_level_weight
 
     -- Now convert this into gold-equivalent value
     local defender_value = defender.cost
@@ -904,8 +913,8 @@ function battle_calcs.attack_rating(attacker, defender, dst, cfg, cache)
     defender_value = defender_value * (1. + defender_starting_damage_fraction * defender_starting_damage_weight)
 
     -- Being closer to leveling is good, we want to get rid of those enemies first
-    local xp_bonus = defender.experience / defender.max_experience
-    defender_value = defender_value * (1. + xp_bonus * xp_weight)
+    local def_xp_bonus = defender.experience / defender.max_experience
+    defender_value = defender_value * (1. + def_xp_bonus * xp_weight)
 
     -- If defender is on a village, add a bonus rating (we want to get rid of those preferentially)
     -- So yes, this is positive, even though it's a plus for the defender
@@ -946,7 +955,7 @@ function battle_calcs.attack_rating(attacker, defender, dst, cfg, cache)
         end
     end
 
-    local defender_rating = value_fraction * defender_value
+    local defender_rating = def_value_fraction * defender_value
 
     -- Finally apply factor of own unit weight to defender unit weight
     attacker_rating = attacker_rating * own_value_weight
@@ -1105,12 +1114,12 @@ function battle_calcs.attack_combo_stats(tmp_attackers, tmp_dsts, defender, cach
         end
 
         -- Get the average HP
-        local av_hp = 0
-        for hp,prob in pairs(att_stats[i].hp_chance) do av_hp = av_hp + hp * prob end
-        att_stats[i].average_hp = av_hp
-        local av_hp = 0
-        for hp,prob in pairs(def_stats[i].hp_chance) do av_hp = av_hp + hp * prob end
-        def_stats[i].average_hp = av_hp
+        local att_av_hp = 0
+        for hp,prob in pairs(att_stats[i].hp_chance) do att_av_hp = att_av_hp + hp * prob end
+        att_stats[i].average_hp = att_av_hp
+        local def_av_hp = 0
+        for hp,prob in pairs(def_stats[i].hp_chance) do def_av_hp = def_av_hp + hp * prob end
+        def_stats[i].average_hp = def_av_hp
     end
 
     -- Get the total rating for this attack combo:
@@ -1162,10 +1171,10 @@ function battle_calcs.get_attack_map_unit(unit, cfg)
     local units_MP = {}
     if (unit.side ~= wesnoth.current.side) then
         local all_units = wesnoth.units.find_on_map { side = wesnoth.current.side }
-        for _,unit in ipairs(all_units) do
-            if (unit.moves > 0) then
-                table.insert(units_MP, unit)
-                unit:extract()
+        for _,a_unit in ipairs(all_units) do
+            if (a_unit.moves > 0) then
+                table.insert(units_MP, a_unit)
+                a_unit:extract()
             end
         end
     end
@@ -1181,7 +1190,7 @@ function battle_calcs.get_attack_map_unit(unit, cfg)
     for _,loc in ipairs(initial_reach) do
         reach.units:insert(loc[1], loc[2], 1)
         reach.hitpoints:insert(loc[1], loc[2], unit.hitpoints)
-        for xa,ya in H.adjacent_tiles(loc[1], loc[2]) do
+        for xa,ya in wesnoth.current.map:iter_adjacent(loc) do
             reach.units:insert(xa, ya, 1)
             reach.hitpoints:insert(xa, ya, unit.hitpoints)
         end
@@ -1377,10 +1386,10 @@ function battle_calcs.get_attack_combos_subset(units, enemy, cfg)
     ----- begin add_attack() -----
     -- Recursive local function adding another attack to the current combo
     -- and adding the current combo to the overall attack_combos array
-    local function add_attack(attacks, reachable_hexes, n_reach, attack_combos, combos_str, current_combo, hexes_used, cfg)
+    local function add_attack(attacks, reachable_hexes, n_reach, attack_combos, combos_str, current_combo, hexes_used, inner_cfg)
 
         local time_up = false
-        if cfg.max_time and (wesnoth.ms_since_init() / 1000. - cfg.start_time >= cfg.max_time) then
+        if inner_cfg.max_time and (wesnoth.ms_since_init() / 1000. - inner_cfg.start_time >= inner_cfg.max_time) then
             time_up = true
         end
 
@@ -1391,18 +1400,18 @@ function battle_calcs.get_attack_combos_subset(units, enemy, cfg)
             for _,att in ipairs(attack) do
                 -- But only if this hex is not used yet and
                 -- the cutoff criteria are not met
-                if (not hexes_used[att.dst]) and (not time_up) and (#attack_combos < cfg.max_combos) then
+                if (not hexes_used[att.dst]) and (not time_up) and (#attack_combos < inner_cfg.max_combos) then
 
                     -- Mark this hex as used by this unit
                     hexes_used[att.dst] = attack.src
 
                     -- Set up a string uniquely identifying the unit/attack hex pairs
                     -- for current_combo. This is used to exclude pairs that already
-                    -- exist in a different order (if 'cfg.order_matters' is not set)
+                    -- exist in a different order (if 'inner_cfg.order_matters' is not set)
                     -- For this, we also add the numerical value of the attack_hex to
                     -- the 'hexes_used' table (in addition to the line above)
                     local str = ''
-                    if (not cfg.order_matters) then
+                    if (not inner_cfg.order_matters) then
                         hexes_used[reachable_hexes[att.dst]] = attack.src
                         for ind_hex = 1,n_reach do
                             if hexes_used[ind_hex] then
@@ -1414,12 +1423,12 @@ function battle_calcs.get_attack_combos_subset(units, enemy, cfg)
                     end
 
                     -- 'combos_str' contains all the strings of previous combos
-                    -- (if 'cfg.order_matters' is not set)
+                    -- (if 'inner_cfg.order_matters' is not set)
                     -- Only add this combo if it does not yet exist
                     if (not combos_str[str]) then
 
                         -- Add the string identifyer to the array
-                        if (not cfg.order_matters) then
+                        if (not inner_cfg.order_matters) then
                             combos_str[str] = true
                         end
 
@@ -1444,7 +1453,7 @@ function battle_calcs.get_attack_combos_subset(units, enemy, cfg)
                     end
 
                     -- And mark the hex as usable again
-                    if (not cfg.order_matters) then
+                    if (not inner_cfg.order_matters) then
                         hexes_used[reachable_hexes[att.dst]] = nil
                     end
                     hexes_used[att.dst] = nil
@@ -1467,7 +1476,7 @@ function battle_calcs.get_attack_combos_subset(units, enemy, cfg)
     -- For units on other sides we always assume that they can move away
     local blocked_hexes = LS.create()
     if units[1] and (units[1].side == wesnoth.current.side) then
-        for xa,ya in H.adjacent_tiles(enemy.x, enemy.y) do
+        for xa,ya in wesnoth.current.map:iter_adjacent(enemy) do
             local unit_in_way = wesnoth.units.get(xa, ya)
             if unit_in_way then
                 -- Units on the same side are blockers if they cannot move away
@@ -1502,7 +1511,7 @@ function battle_calcs.get_attack_combos_subset(units, enemy, cfg)
 
         local locs = {}  -- attack locations for this unit
 
-        for xa,ya in H.adjacent_tiles(enemy.x, enemy.y) do
+        for xa,ya in wesnoth.current.map:iter_adjacent(enemy) do
 
             local loc = {}  -- attack location information for this unit for this hex
 

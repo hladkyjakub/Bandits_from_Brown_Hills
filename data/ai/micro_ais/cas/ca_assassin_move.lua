@@ -1,4 +1,3 @@
-local H = wesnoth.require "helper"
 local AH = wesnoth.require "ai/lua/ai_helper.lua"
 local LS = wesnoth.require "location_set"
 
@@ -64,6 +63,7 @@ function ca_assassin_move:execution(cfg)
     local enemy_damage_map = LS.create()
     for _,enemy in ipairs(enemies) do
         if (not enemy.status.petrified) then
+            wesnoth.interface.handle_user_interact()
             -- Need to "move" enemy next to unit for attack calculation
             -- Do this with a unit copy, so that no actual unit has to be moved
             local enemy_copy = enemy:clone()
@@ -81,7 +81,7 @@ function ca_assassin_move:execution(cfg)
             local unit_damage_map = LS.create()
             for _,loc in ipairs(reach) do
                 unit_damage_map:insert(loc[1], loc[2], max_damage)
-                for xa,ya in H.adjacent_tiles(loc[1], loc[2]) do
+                for xa,ya in wesnoth.current.map:iter_adjacent(loc) do
                     unit_damage_map:insert(xa, ya, max_damage)
                 end
             end
@@ -119,7 +119,7 @@ function ca_assassin_move:execution(cfg)
         end
 
         if zoc_active then
-            for xa,ya in H.adjacent_tiles(enemy.x, enemy.y) do
+            for xa,ya in wesnoth.current.map:iter_adjacent(enemy) do
                 enemy_rating_map:insert(xa, ya, (enemy_rating_map:get(xa, ya) or 0) + unit.max_moves)
             end
         end

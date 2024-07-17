@@ -1,4 +1,3 @@
-local helper = wesnoth.require "helper"
 local utils = wesnoth.require "wml-utils"
 local wml_actions = wesnoth.wml_actions
 local T = wml.tag
@@ -12,9 +11,6 @@ wesnoth.require "wml"
 Note: When adding new WML tags, unless they're very simple, it's preferred to
 add a new file in the "data/lua/wml" directory rather than implementing it in this file.
 The file will then automatically be loaded by the above require statement.
-
-Also note: The above on_load event needs to be registered before any other on_load events.
-That means before loading the WML tags via wesnoth.require "wml".
 
 ]]
 
@@ -73,7 +69,7 @@ function wml_actions.chat(cfg)
 	local observable = cfg.observable ~= false
 
 	if observable then
-		local all_sides = wesnoth.sides.find()
+		local all_sides = wesnoth.sides.find{}
 		local has_human_side = false
 		for index, side in ipairs(all_sides) do
 			if side.controller == "human" and side.is_local then
@@ -104,11 +100,12 @@ function wml_actions.store_gold(cfg)
 	if team then wml.variables[cfg.variable or "gold"] = team.gold end
 end
 
+---@diagnostic disable-next-line: redundant-parameter
 function wml_actions.clear_variable(cfg, variables)
 	local names = cfg.name or
 		wml.error "[clear_variable] missing required name= attribute."
 	if variables == nil then variables = wml.variables end
-	for _,w in ipairs(names:split()) do
+	for _,w in ipairs(tostring(names):split()) do
 		variables[w:trim()] = nil
 	end
 end
@@ -119,8 +116,7 @@ function wml_actions.store_unit_type_ids(cfg)
 		table.insert(types, k)
 	end
 	table.sort(types)
-	types = table.concat(types, ',')
-	wml.variables[cfg.variable or "unit_type_ids"] = types
+	wml.variables[cfg.variable or "unit_type_ids"] = table.concat(types, ',')
 end
 
 function wml_actions.store_unit_type(cfg)
@@ -147,10 +143,12 @@ function wml_actions.fire_event(cfg)
 
 	local w1 = wml.get_child(cfg, "primary_attack")
 	local w2 = wml.get_child(cfg, "secondary_attack")
-	if w2 then w1 = w1 or {} end
+	local data = wml.get_child(cfg, "data") or {}
+	if w1 then table.insert(data, wml.tag.first(w1)) end
+	if w2 then table.insert(data, wml.tag.second(w2)) end
 
-	if cfg.id and cfg.id ~= "" then wesnoth.fire_event_by_id(cfg.id, x1, y1, x2, y2, w1, w2)
-	elseif cfg.name and cfg.name ~= "" then wesnoth.fire_event(cfg.name, x1, y1, x2, y2, w1, w2)
+	if cfg.id and cfg.id ~= "" then wesnoth.game_events.fire_by_id(cfg.id, x1, y1, x2, y2, data)
+	elseif cfg.name and cfg.name ~= "" then wesnoth.game_events.fire(cfg.name, x1, y1, x2, y2, data)
 	end
 end
 
@@ -347,7 +345,7 @@ function wml_actions.unit_overlay(cfg)
 	local img = cfg.image or wml.error( "[unit_overlay] missing required image= attribute" )
 	for i,u in ipairs(wesnoth.units.find_on_map(cfg)) do
 		local has_already = false
-		for i, w in ipairs(u.overlays) do
+		for j, w in ipairs(u.overlays) do
 			if w == img then has_already = true end
 		end
 		if has_already == false then
@@ -367,7 +365,7 @@ function wml_actions.remove_unit_overlay(cfg)
 	local img = cfg.image or wml.error( "[remove_unit_overlay] missing required image= attribute" )
 	for i,u in ipairs(wesnoth.units.find_on_map(cfg)) do
 		local has_already = false
-		for i, w in ipairs(u.overlays) do
+		for j, w in ipairs(u.overlays) do
 			if w == img then has_already = true end
 		end
 		if has_already then
@@ -456,6 +454,8 @@ function wml_actions.capture_village(cfg)
 	local locs = wesnoth.map.find(cfg)
 
 	for i, loc in ipairs(locs) do
+		-- The fire_event parameter doesn't currently exist but probably should someday
+		---@diagnostic disable-next-line : redundant-parameter
 		wesnoth.map.set_owner(loc[1], loc[2], side, fire_event)
 	end
 end
@@ -497,7 +497,7 @@ function wml_actions.petrify(cfg)
 		unit.status.petrified = true
 		-- Extract unit and put it back to update animation (not needed for recall units)
 		unit:extract()
-		unit:to_map()
+		unit:to_map(false)
 	end
 
 	for index, unit in ipairs(wesnoth.units.find_on_recall{wml.tag["and"](cfg)}) do
@@ -510,7 +510,7 @@ function wml_actions.unpetrify(cfg)
 		unit.status.petrified = false
 		-- Extract unit and put it back to update animation (not needed for recall units)
 		unit:extract()
-		unit:to_map()
+		unit:to_map(false)
 	end
 
 	for index, unit in ipairs(wesnoth.units.find_on_recall(cfg)) do
@@ -548,7 +548,7 @@ end
 
 function wml_actions.store_side(cfg)
 	local writer = utils.vwriter.init(cfg, "side")
-	for t, side_number in helper.get_sides(cfg) do
+	for t, side_number in wesnoth.sides.iter(cfg) do
 		local container = t.__cfg
 		-- set values not properly handled by the __cfg
 		container.income = t.total_income
@@ -647,7 +647,11 @@ function wml_actions.put_to_recall_list(cfg)
 end
 
 function wml_actions.allow_undo(cfg)
-	wesnoth.allow_undo()
+	wesnoth.experimental.game_events.set_undoable(true)
+end
+
+function wml_actions.disallow_undo(cfg)
+	wesnoth.experimental.game_events.set_undoable(false)
 end
 
 function wml_actions.allow_end_turn(cfg)
@@ -664,6 +668,7 @@ end
 
 function wml_actions.set_menu_item(cfg)
 	wesnoth.interface.set_menu_item(cfg.id, cfg)
+	wesnoth.game_events.add_menu(cfg.id, wml_actions.command)
 end
 
 function wml_actions.place_shroud(cfg)
@@ -686,7 +691,7 @@ function wml_actions.time_area(cfg)
 	if cfg.remove then
 		wml_actions.remove_time_area(cfg)
 	else
-		wesnoth.map.place_area(cfg)
+		wesnoth.map.place_area(cfg.id or '', cfg, cfg)
 	end
 end
 
@@ -719,6 +724,11 @@ function wml_actions.color_adjust(cfg)
 	wesnoth.interface.color_adjust(cfg.red or 0, cfg.green or 0, cfg.blue or 0)
 end
 
+function wml_actions.screen_fade(cfg)
+	local color = {cfg.red or 0, cfg.green or 0, cfg.blue or 0, cfg.alpha}
+	wesnoth.interface.screen_fade(color, cfg.duration)
+end
+
 function wml_actions.end_turn(cfg)
 	wesnoth.interface.end_turn()
 end
@@ -728,7 +738,7 @@ function wml_actions.event(cfg)
 		wesnoth.deprecated_message("[event]remove=yes", 2, "1.17.0", "Use [remove_event] instead of [event]remove=yes")
 		wml_actions.remove_event(cfg)
 	else
-		wesnoth.add_event_handler(cfg)
+		wesnoth.game_events.add_wml(cfg)
 	end
 end
 
@@ -736,7 +746,7 @@ function wml_actions.remove_event(cfg)
 	local id = cfg.id or wml.error("[remove_event] missing required id= key")
 
 	for _,w in ipairs(id:split()) do
-		wesnoth.remove_event_handler(w)
+		wesnoth.game_events.remove(w)
 	end
 end
 
@@ -767,8 +777,28 @@ function wml_actions.redraw(cfg)
 	wesnoth.redraw(cfg, clear_shroud)
 end
 
+local wml_floating_label = {valid = false}
 function wml_actions.print(cfg)
-	wesnoth.print(cfg)
+	local options = {}
+	if wml_floating_label.valid then
+		wml_floating_label:remove()
+	end
+	if cfg.size then
+		options.size = cfg.size
+	end
+	if cfg.color then
+		options.color = stringx.split(cfg.color)
+	elseif cfg.red or cfg.green or cfg.blue then
+		options.color = {cfg.red or 0, cfg.green or 0, cfg.blue or 0}
+	end
+	if cfg.duration then
+		options.duration = cfg.duration
+	end
+	if cfg.fade_time then
+		options.fade_time = cfg.fade_time
+	end
+
+	wml_floating_label = wesnoth.interface.add_overlay_text(cfg.text, options)
 end
 
 function wml_actions.unsynced(cfg)
@@ -895,7 +925,7 @@ function wesnoth.wml_actions.zoom(cfg)
 end
 
 function wesnoth.wml_actions.story(cfg)
-	local title = cfg.title or wml.error "Missing title key in [story] ActionWML"
+	local title = cfg.title or wesnoth.scenario.name
 	gui.show_story(cfg, title)
 end
 
@@ -982,5 +1012,30 @@ function wml_actions.remove_trait(cfg)
 	local obj_id = cfg.trait_id
 	for _,unit in ipairs(wesnoth.units.find_on_map(cfg)) do
 		unit:remove_modifications({id = obj_id}, "trait")
+	end
+end
+
+function wml_actions.set_achievement(cfg)
+	wesnoth.achievements.set(cfg.content_for, cfg.id)
+end
+
+function wml_actions.set_sub_achievement(cfg)
+	wesnoth.achievements.set_sub_achievement(cfg.content_for, cfg.id, cfg.sub_id)
+end
+
+function wml_actions.progress_achievement(cfg)
+	if not tonumber(cfg.amount) then
+		wml.error("[progress_achievement] amount attribute not a number for content '"..cfg.content_for.."' and achievement '"..cfg.id.."'")
+		return
+	end
+
+	wesnoth.achievements.progress(cfg.content_for, cfg.id, cfg.amount, tonumber(cfg.limit) or 999999999)
+end
+
+function wml_actions.on_undo(cfg)
+	if cfg.delayed_variable_substitution then
+		wesnoth.experimental.game_events.add_undo_actions(wml.literal(cfg));
+	else
+		wesnoth.experimental.game_events.add_undo_actions(wml.parsed(cfg));
 	end
 end

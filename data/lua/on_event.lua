@@ -2,51 +2,38 @@
 -- so you have to call this function from a toplevel lua tag or from a preload event.
 -- It is also not possible to use this for first_time_only=yes events.
 
-if rawget(_G, "core_on_event") then
-	return rawget(_G, "core_on_event")  -- prevent double execution
-end
+-- This api used to be the default way to add events from lua (with its own implementation in lua
+-- based on game_events.on_event). Now it just calls game_evets.add, because otherwise the
+-- priority parameter wouldn't work across the different implementations.
+-- Still kept for compatibility and because it has an easier to
+-- use interface. Meaning you can easily write in a lua file:
+--
+-- on_event("moveto", 10, function(ec)
+--   ...
+-- end)
+--
+-- which is imo more convenient than the interface wesnoth.game_events.add or wesnoth.game_events.add_repeating offers
+-- even though its at this point technically equivalent to the latter.
 
-local event_handlers = {}
+---Register an event handler
+---@param eventname string The event to handle; can be a comma-separated list
+---@param priority? number Events execute in order of decreasing priority, and secondarily in order of adding
+---@param fcn fun(ctx:event_context)
+---@overload fun(eventname:string, fcn:fun(ctx:event_context))
+return function(eventname, priority, fcn)
+	if type(priority) == "function" then
+		fcn = priority
+		priority = 0.5
+	end
 
-local old_on_event = wesnoth.game_events.on_event or function(eventname) end
-wesnoth.game_events.on_event = function(eventname)
-	old_on_event(eventname)
-	local context = nil
-	for _, entry in pairs(event_handlers[eventname] or {}) do
-		if context == nil then
+	wesnoth.game_events.add{
+		name = eventname,
+		priority = priority,
+		first_time_only = false,
+		action = function()
 			context = wesnoth.current.event_context
+			wesnoth.experimental.game_events.set_undoable(true)
+			fcn(context)
 		end
-		entry.h(context)
-	end
+	}
 end
-
-
-local function on_event(eventname, arg1, arg2)
-	if string.match(eventname, ",") then
-		for _,elem in ipairs((eventname or ""):split()) do
-			on_event(elem, arg1, arg2)
-		end
-		return
-	end
-	local priority = 0
-	local handler
-	if type(arg1) == "function" then
-		handler = arg1
-	else
-		priority = arg1
-		handler = arg2
-	end
-	eventname = string.gsub(eventname, " ", "_")
-	event_handlers[eventname] = event_handlers[eventname] or {}
-	local eh = event_handlers[eventname]
-	table.insert(eh, { h = handler, p = priority})
-	-- prioritize last entry
-	for i = #eh - 1, 1, -1 do
-		if eh[i].p < eh[i + 1].p then
-			eh[i], eh[i + 1] = eh[i + 1], eh[i]
-		end
-	end
-end
-
-core_on_event = on_event
-return on_event
