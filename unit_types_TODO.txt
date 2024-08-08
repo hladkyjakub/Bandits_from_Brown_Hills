@@ -1,0 +1,43 @@
+Bandit, Highwayman,                     #tank/support (comrade in arm)
+Ranger,
+
+Dwarvish Fighter, Dwarvish Steelclad, Dwarvish Lord,                #all rounded attacker
+Dwarvish Scout, Dwarvish Pathfinder, Dwarvish Explorer,             #scout
+Dwarvish Guardsman, Dwarvish Stalwart, Dwarvish Sentinel,           #TANK
+Dwarvish Thunderer, Dwarvish Thunderguard, Dwarvish Dragonguard,    #damage_dealer
+
+Spearman, Javelineer,                               #Defending vs melee/ranged
+Bowman, Longbowman, Master Bowman,              
+Sergeant, Lieutenant, General, Grand Marshal,       #leader
+Short Swordsman, Swordsman, Royal Guard,            
+Knight, Lancer, Paladin, Grand Knight,    #Shock troopers -suprise for horseman
+
+Giant Spider, #one OP ability // trail of Webs?
+
+Naga Fighter, Naga Warrior, Naga Myrmidon,                                  #
+Naga Dirkfang, Naga Ophidian, Naga Sicarius, Naga Ringcaster, Naga Zephyr,  #mixed fighter?
+
+Ghost, Wraith, Spectre, Shadow, Nightgaunt, 
+Deathblade, Revenant, Draug,                #close tank (Deathblade damage dealer)
+Skeleton Archer, Bone Shooter, Banebow,     #damage dealer
+Necrophage, Ghast,                          #debuf enemy WEAPON_SPECIAL_CORRODE
+
+Goblin Rouser,                              #drumbeat grant fearless to adjacent allies
+Great Wolf, Direwolf, Direwolf Rider        #damage
+
+# 32/90 vymysleno
+# - 8 + 1
+
+(Cavalryman, Dragoon,Cavalier)
+(Dwarvish Runesmith, Dwarvish Runemaster, Dwarvish Arcanister)
+(Peasant, Woodsman)
+(Mermans)
+(Naga guard line)
+
+Horseman        - charge - if it moves at least 6 tiles
+Goblin Pillager - tangled_slaughter unfinnished, maybe torch?
+Dark Adept, Dark Sorcerer - zombie spawn + undead boost
+Trapper/Huntsman - "bleed"
+(Ancient Lich - boss, for S04 (probably))
+
+#could give units around him one more strike?

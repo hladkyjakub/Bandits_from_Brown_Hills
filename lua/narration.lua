@@ -156,7 +156,7 @@ function wml_actions.narration( cfg )
 		if unit == nil then
 			title = cfg.title or  "Narrator"
 		else
-			title = cfg.title or (tostring(unit.name) ~= "" and unit.name or unit.type)
+			title = cfg.title or (tostring(unit.name) ~= "" and unit.name or unit.__cfg.language_name or "")
 		end
 		-- dialog.left_image.label = left_image
 		-- dialog.right_image.label = right_image
