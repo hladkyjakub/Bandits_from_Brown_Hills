@@ -94,7 +94,8 @@ function real_ranged_attack:evaluation()
             goto continue
         end
         local att_weapon, def_weapon = BC.best_weapons(wesnoth.units.get(it.src), wesnoth.units.get(it.target), { it.dst.x, it.dst.y })
-        local rating = BC.attack_rating(wesnoth.units.get(it.src), wesnoth.units.get(it.target), { it.dst.x, it.dst.y }, {att_weapon = att_weapon, def_weapon = def_weapon} ) --it:rating(self:get_aggression(), self) --get_aggression now
+        local rating = BC.ranged_attack_rating(wesnoth.units.get(it.src), wesnoth.units.get(it.target), { it.dst.x, it.dst.y }, {att_weapon = att_weapon, def_weapon = def_weapon} ) --it:rating(self:get_aggression(), self) --get_aggression now
+        std_print(it.dst.x,it.dst.y)
         std_print(rating)
         if rating > choice_rating then
             choice_it = it
@@ -105,7 +106,7 @@ function real_ranged_attack:evaluation()
     if choice_rating > 0.0 then
         best_analysis = choice_it
         --BfBH.table.std_print(best_analysis)
-        return choice_rating --what to return?
+        return 100000 --what to return?
     else
         best_analysis = -1000
         --BfBH.table.std_print(best_analysis)
@@ -115,29 +116,34 @@ end
 function real_ranged_attack:execution()
     assert(choice_rating > 0.0)
     assert(best_analysis ~= -1000)
-    --BfBH.table.std_print(best_analysis)
-    local from = best_analysis.src
-    local unit = wesnoth.units.get(from)
-    local to = best_analysis.dst
-    local target_loc = best_analysis.target
-    local second_unit = wesnoth.units.get(target_loc)
-    local att_weapon, def_weapon = BC.best_weapons(unit, second_unit, { best_analysis.dst.x, best_analysis.dst.y })
-    if from ~= to then
-        if not ai.check_move(unit, to) then
-            --LOG_AI_TESTING_AI_DEFAULT(self:get_name() .. "::execute not ok, move failed")
-            return
+    if best_analysis ~= nil then
+        --BfBH.table.std_print(best_analysis)
+        local from = best_analysis.src
+        local unit = wesnoth.units.get(from)
+        local to = best_analysis.dst
+        local target_loc = best_analysis.target
+        local second_unit = wesnoth.units.get(target_loc)
+        local att_weapon, def_weapon = BC.best_weapons(unit, second_unit, { best_analysis.dst.x, best_analysis.dst.y })
+        if from ~= to then
+            if not ai.check_move(unit, to) then
+                    std_print("ERROR, didn't pass the move")
+                return
+            end
         end
+        std_print("unit should move now")
+        std_print("From: x="..from.x.." y="..from.y.."    To: x="..to.x.." y="..to.y)
+        ai.move_full(unit, to)
+        if not ai.check_attack(unit, second_unit, -1) then
+            std_print("ERROR, execute not ok, attack cancelled")
+        else
+            --ai.attack(unit, second_unit, -1)
+            std_print("unit should attack now, possible error, if no attack")
+            wesnoth.wml_actions.do_command({
+                {"attack",{weapon = (att_weapon - 1),defender_weapon = (def_weapon - 1),{"source", {x = unit.x, y = unit.y}}, {"destination", {x = second_unit.x, y = second_unit.y}}}}
+            })
+        end
+        choice_rating=-1000
     end
-    ai.move_full(unit, to)
-    if not ai.check_attack(unit, second_unit, -1) then
-        --LOG_AI_TESTING_AI_DEFAULT(self:get_name() .. "::execute not ok, attack cancelled")
-    else
-        --ai.attack(unit, second_unit, -1)
-        wesnoth.wml_actions.do_command({
-            {"attack",{weapon = (att_weapon - 1),defender_weapon = (def_weapon - 1),{"source", {x = unit.x, y = unit.y}}, {"destination", {x = second_unit.x, y = second_unit.y}}}}
-        })
-    end
-    choice_rating=-1000
 end
 
 return real_ranged_attack

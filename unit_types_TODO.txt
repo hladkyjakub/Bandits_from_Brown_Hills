@@ -1,43 +1,58 @@
 Bandit, Highwayman,                     #tank/support (comrade in arm)
-Ranger,
+Ranger,                                 #terrain-related
 
-Dwarvish Fighter, Dwarvish Steelclad, Dwarvish Lord,                #all rounded attacker
-Dwarvish Scout, Dwarvish Pathfinder, Dwarvish Explorer,             #scout
-Dwarvish Guardsman, Dwarvish Stalwart, Dwarvish Sentinel,           #TANK
-Dwarvish Thunderer, Dwarvish Thunderguard, Dwarvish Dragonguard,    #damage_dealer
+Dwarvish Steelclad, Dwarvish Lord,                #all rounded attacker
+Dwarvish Scout, Dwarvish Pathfinder, Dwarvish Explorer,             #Anti-ranged shock-troop? invisible in caves, mountains
+Dwarvish Sentinel,                               #TANK
+Dwarvish Thunderguard, Dwarvish Dragonguard,    #damage_dealer
 
-Spearman, Javelineer,                               #Defending vs melee/ranged
-Bowman, Longbowman, Master Bowman,              
-Sergeant, Lieutenant, General, Grand Marshal,       #leader
-Short Swordsman, Swordsman, Royal Guard,            
-Knight, Lancer, Paladin, Grand Knight,    #Shock troopers -suprise for horseman
+Javelineer,                               #Defending vs melee/ranged
+Longbowman, Master Bowman,                          #damage dealer
+General, Grand Marshal,                             #Covered already, needs to implement
+Royal Guard,                       #melee tank
+Knight, Paladin, Grand Knight,                      #Shock troopers (Paladin rightenous? edit)
 
-Giant Spider, #one OP ability // trail of Webs?
+Giant Spider,   #one OP ability // trail of Webs?/ traps
 
-Naga Fighter, Naga Warrior, Naga Myrmidon,                                  #
-Naga Dirkfang, Naga Ophidian, Naga Sicarius, Naga Ringcaster, Naga Zephyr,  #mixed fighter?
+Naga Fighter, Naga Myrmidon,                                                #swift naga , 2 attacks, after first attacking, give 2 moves (but weaker attacks???)
+Naga Dirkfang, Naga Ophidian, Naga Sicarius, Naga Ringcaster, Naga Zephyr,  #mixed fighter? ranged damage, tank #RAPIDFIRE
 
-Ghost, Wraith, Spectre, Shadow, Nightgaunt, 
-Deathblade, Revenant, Draug,                #close tank (Deathblade damage dealer)
-Skeleton Archer, Bone Shooter, Banebow,     #damage dealer
-Necrophage, Ghast,                          #debuf enemy WEAPON_SPECIAL_CORRODE
+Ghost, Wraith, Spectre, Shadow, Nightgaunt, # posses an enemy?
+Deathblade, Revenant, Draug,                #close tank (Deathblade damage dealer), both skeletons not sure the HP limit?
+Skeleton Archer, Bone Shooter, Banebow,     #damage dealer "Cursed Shots"?
 
-Goblin Rouser,                              #drumbeat grant fearless to adjacent allies
-Great Wolf, Direwolf, Direwolf Rider        #damage
+Great Wolf, Direwolf, Direwolf Rider,        #damage (pack leader on lvl 2 raider already)
 
-# 32/90 vymysleno
+# 49 na listu
 # - 8 + 1
 
+Once per battle, when Hp drops low, enter defenzive stance, loose movement, heal a lot of HP, gain defence/evasion bonus
+reduce movement of enemies starting next to this unit at start of their turn
+chance for extra attack... when nothing/1 hits?
+#heal one adjacent ally by 8HP when ending turn with attack left,cannot heal poisoned units, unit can be healed just once per turn
+feed- when kills an enemy, heal all adjacent allied wolves to the dead enemy by 15% of enemyes max HP
+lvl2/3 1/2 bonus armor
+"Pinning Strike" -immobilize defender -deatblade?
+"Nimble" -10%/-20% being hit by ranged attacks (for dwarvish scouts?)
+"Ambush" - When attacking from concealment (forest, village, etc.), the Bandit/Highwayman gains a significant damage bonus and chance to inflict a random debuff (e.g. slow, disarm, bleed).
+If Ranger donesn't attack by the end of the turn, lay down a trap, dealing 10 damage upon entering (bleed?,mark?)
+"Rallying Presence" - Whenever the leader is adjacent to an allied unit that becomes wounded, the leader can use their authority to inspire the ally, temporarily boosting their morale and defense.
+Grand mashall -> + 25% damage boost for all allies (negate the caves Tod)
+Grand Knight  -> + 1 move for all allies (boost in caves)
+
+(Lieutenant) (sergeant isn't in game, he has leadership already... feels enought for me?)
 (Cavalryman, Dragoon,Cavalier)
 (Dwarvish Runesmith, Dwarvish Runemaster, Dwarvish Arcanister)
 (Peasant, Woodsman)
 (Mermans)
 (Naga guard line)
+(Vampire Bat)
 
-Horseman        - charge - if it moves at least 6 tiles
-Goblin Pillager - tangled_slaughter unfinnished, maybe torch?
 Dark Adept, Dark Sorcerer - zombie spawn + undead boost
 Trapper/Huntsman - "bleed"
-(Ancient Lich - boss, for S04 (probably))
+(Ancient Lich - boss, for S04 (+ S05cards maybe?))
 
 #could give units around him one more strike?
+
+#1.20+ notes:
+drumbeat not perfect

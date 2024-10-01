@@ -64,6 +64,8 @@ function battle_calcs.unit_attack_info(unit, cache)
         a.damage = attack.damage
         a.type = attack.type
         a.range = attack.range
+        a.max_range = attack.__cfg.max_range
+        a.min_range = attack.__cfg.min_range
         -- number must be defined for battle_calcs.best_weapons()
         a.number = attack.number or 0
 
@@ -197,13 +199,19 @@ function battle_calcs.best_weapons(attacker, defender, dst, cache)
 
     local attacker_info = battle_calcs.unit_attack_info(attacker, cache)
     local defender_info = battle_calcs.unit_attack_info(defender, cache)
-
+    local distance = wesnoth.map.distance_between(dst,defender)
     -- Best attacker weapon
     local max_rating, best_att_weapon, best_def_weapon = - math.huge, 0, 0
     for att_weapon_number,att_weapon in ipairs(attacker_info.attacks) do
+        if att_weapon.min_range > distance  or distance > att_weapon.max_range then
+            goto continue
+        end
         local att_damage = battle_calcs.strike_damage(attacker, defender, att_weapon_number, 0, { dst[1], dst[2] }, cache)
         local max_def_rating, tmp_best_def_weapon = - math.huge, 0
         for def_weapon_number,def_weapon in ipairs(defender_info.attacks) do
+            if def_weapon.min_range > distance  or distance > def_weapon.max_range then
+                goto continue_defender_weapons_loop
+            end
             if (def_weapon.range == att_weapon.range) then
                 local def_damage = battle_calcs.strike_damage(defender, attacker, def_weapon_number, 0, { defender.x, defender.y }, cache)
                 local def_rating = def_damage * def_weapon.number
@@ -211,6 +219,7 @@ function battle_calcs.best_weapons(attacker, defender, dst, cache)
                     max_def_rating, tmp_best_def_weapon = def_rating, def_weapon_number
                 end
             end
+            ::continue_defender_weapons_loop::
         end
 
         local rating = att_damage * att_weapon.number
@@ -219,6 +228,7 @@ function battle_calcs.best_weapons(attacker, defender, dst, cache)
         if (rating > max_rating) then
             max_rating, best_att_weapon, best_def_weapon = rating, att_weapon_number, tmp_best_def_weapon
         end
+        ::continue::
     end
 
     if cache then
@@ -945,6 +955,232 @@ function battle_calcs.attack_rating(attacker, defender, dst, cfg, cache)
             defender_value = defender_value + occupied_hex_penalty
         end
     end
+
+    local defender_rating = value_fraction * defender_value
+
+    -- Finally apply factor of own unit weight to defender unit weight
+    attacker_rating = attacker_rating * own_value_weight
+
+    local rating = defender_rating + attacker_rating
+
+    return rating, defender_rating, attacker_rating, att_stats, def_stats
+end
+
+function battle_calcs.ranged_attack_rating(attacker, defender, dst, cfg, cache)
+    -- Returns a common (but configurable) rating for attacks
+    -- Inputs:
+    -- @attacker: attacker unit
+    -- @defender: defender unit
+    -- @dst: the attack location in form { x, y }
+    -- @cfg: table of optional inputs and configurable rating parameters
+    --  Optional inputs:
+    --    - att_stats, def_stats: if given, use these stats, otherwise calculate them here
+    --        Note: these are calculated in combination, that is they either both need to be passed or both be omitted
+    --    - att_weapon/def_weapon: the attacker/defender weapon to be used if calculating battle stats here
+    --        This parameter is meaningless (unused) if att_stats/def_stats are passed
+    --        Defaults to weapon that does most damage to the opponent
+    --        Note: as with the stats, they either both need to be passed or both be omitted
+    -- @cache: cache table to be passed to battle_calcs.battle_outcome
+    --
+    -- Returns:
+    --   - Overall rating for the attack or attack combo
+    --   - Defender rating: not additive for attack combos; needs to be calculated for the
+    --     defender stats of the last attack in a combo (that works for everything except
+    --     the rating whether the defender is about to level in the attack combo)
+    --   - Attacker rating: this one is split up into two terms:
+    --     - a term that is additive for individual attacks in a combo
+    --     - a term that needs to be average for the individual attacks in a combo
+    --   - att_stats, def_stats: useful if they were calculated here, rather than passed down
+
+    cfg = cfg or {}
+
+    -- Set up the config parameters for the rating
+    local enemy_leader_weight = cfg.enemy_leader_weight or 5.
+    local defender_starting_damage_weight = cfg.defender_starting_damage_weight or 0.33
+    local xp_weight = cfg.xp_weight or 0.25
+    local level_weight = cfg.level_weight or 1.0
+    local defender_level_weight = cfg.defender_level_weight or 1.0
+    local distance_leader_weight = cfg.distance_leader_weight or 0.002
+    local defense_weight = cfg.defense_weight or 0.1
+    local occupied_hex_penalty = cfg.occupied_hex_penalty or -0.001
+    local own_value_weight = cfg.own_value_weight or 1.0
+
+    -- Get att_stats, def_stats
+    -- If they are passed in cfg, use those
+    local att_stats, def_stats = {}, {}
+    if (not cfg.att_stats) or (not cfg.def_stats) then
+        -- If cfg specifies the weapons use those, otherwise use "best" weapons
+        -- In the latter case, cfg.???_weapon will be nil, which will be passed on
+        local battle_cfg = { att_weapon = cfg.att_weapon, def_weapon = cfg.def_weapon, dst = dst }
+        att_stats,def_stats = battle_calcs.battle_outcome(attacker, defender, battle_cfg, cache)
+    else
+        att_stats, def_stats = cfg.att_stats, cfg.def_stats
+    end
+
+    -- We also need the leader (well, the location at least)
+    -- because if there's no other difference, prefer location _between_ the leader and the defender
+    local leader = wesnoth.units.find_on_map { side = attacker.side, canrecruit = 'yes' }[1]
+
+    ------ All the attacker contributions: ------
+    -- Add up rating for the attacking unit
+    -- We add this up in units of fraction of max_hitpoints
+    -- It is multiplied by unit cost later, to get a gold equivalent value
+
+    -- Average damage to unit is negative rating
+    local damage = attacker.hitpoints - att_stats.average_hp
+    -- Count poisoned as additional damage done by poison times probability of being poisoned
+    if (att_stats.poisoned ~= 0) then
+        damage = damage + wesnoth.game_config.poison_amount * (att_stats.poisoned - att_stats.hp_chance[0])
+    end
+    -- Count slowed as additional 6 HP damage times probability of being slowed
+    if (att_stats.slowed ~= 0) then
+        damage = damage + 6 * (att_stats.slowed - att_stats.hp_chance[0])
+    end
+
+    local map = wesnoth.current.map
+
+    -- If attack is from a healing location, count that as slightly more than the healing amount
+    damage = damage - 1.25 * wesnoth.terrain_types[map[dst]].healing
+
+    -- Equivalently, if attack is adjacent to an unoccupied healing location, that's bad
+    for xa,ya in H.adjacent_tiles(dst[1], dst[2]) do
+        local healing = wesnoth.terrain_types[map[{xa, ya}]].healing
+        if (healing > 0) and (not wesnoth.units.get(xa, ya)) then
+            damage = damage + 1.25 * healing
+        end
+    end
+
+    if (damage < 0) then damage = 0 end
+
+    -- Fraction damage (= fractional value of the unit)
+    local value_fraction = - damage / attacker.max_hitpoints
+
+    -- Additional, subtract the chance to die, in order to (de)emphasize units that might die
+    value_fraction = value_fraction - att_stats.hp_chance[0]
+
+    -- In addition, potentially leveling up in this attack is a huge bonus,
+    -- proportional to the chance of it happening and the chance of not dying itself
+    local level_bonus = 0.
+    local defender_level = defender.level
+    if (attacker.max_experience - attacker.experience <= defender_level * wesnoth.game_config.combat_experience) then
+        level_bonus = 1. - att_stats.hp_chance[0]
+    else
+        if (defender_level == 0) then defender_level = 0.5 end
+        if (attacker.max_experience - attacker.experience <= defender_level * wesnoth.game_config.kill_experience) then
+            level_bonus = (1. - att_stats.hp_chance[0]) * def_stats.hp_chance[0]
+        end
+    end
+    value_fraction = value_fraction + level_bonus * level_weight
+
+
+    -- Now convert this into gold-equivalent value
+    local attacker_value = attacker.cost
+
+    -- Being closer to leveling is good (this makes AI prefer units with lots of XP)
+    local xp_bonus = attacker.experience / attacker.max_experience
+    attacker_value = attacker_value * (1. + xp_bonus * xp_weight)
+
+    local attacker_rating = value_fraction * attacker_value
+
+    ------ Now (most of) the same for the defender ------
+    -- Average damage to defender is positive rating
+    local damage = defender.hitpoints - def_stats.average_hp
+    -- Count poisoned as additional damage done by poison times probability of being poisoned
+    if (def_stats.poisoned ~= 0) then
+        damage = damage + wesnoth.game_config.poison_amount * (def_stats.poisoned - def_stats.hp_chance[0])
+    end
+    -- Count slowed as additional 6 HP damage times probability of being slowed
+    if (def_stats.slowed ~= 0) then
+        damage = damage + 6 * (def_stats.slowed - def_stats.hp_chance[0])
+    end
+
+    -- If defender is on a healing location, count that as slightly more than the healing amount
+    damage = damage - 1.25 * wesnoth.terrain_types[map[defender]].healing
+
+    if (damage < 0) then damage = 0. end
+
+    -- Fraction damage (= fractional value of the unit)
+    local value_fraction = damage / defender.max_hitpoints
+
+    -- Additional, add the chance to kill, in order to emphasize enemies we might be able to kill
+    value_fraction = value_fraction + def_stats.hp_chance[0]
+
+    -- In addition, the defender potentially leveling up in this attack is a huge penalty,
+    -- proportional to the chance of it happening and the chance of not dying itself
+    local defender_level_penalty = 0.
+    local attacker_level = attacker.level
+    if (defender.max_experience - defender.experience <= attacker_level * wesnoth.game_config.combat_experience) then
+        defender_level_penalty = 1. - def_stats.hp_chance[0]
+    else
+        if (attacker_level == 0) then attacker_level = 0.5 end
+        if (defender.max_experience - defender.experience <= attacker_level * wesnoth.game_config.kill_experience) then
+            defender_level_penalty = (1. - def_stats.hp_chance[0]) * att_stats.hp_chance[0]
+        end
+    end
+    value_fraction = value_fraction - defender_level_penalty * defender_level_weight
+
+    -- Now convert this into gold-equivalent value
+    local defender_value = defender.cost
+
+    -- If this is the enemy leader, make damage to it much more important
+    if defender.canrecruit then
+        defender_value = defender_value * enemy_leader_weight
+    end
+
+    -- And prefer to attack already damaged enemies
+    local defender_starting_damage_fraction = (defender.max_hitpoints - defender.hitpoints) / defender.max_hitpoints
+    defender_value = defender_value * (1. + defender_starting_damage_fraction * defender_starting_damage_weight)
+
+    -- Being closer to leveling is good, we want to get rid of those enemies first
+    local xp_bonus = defender.experience / defender.max_experience
+    defender_value = defender_value * (1. + xp_bonus * xp_weight)
+
+    -- If defender is on a village, add a bonus rating (we want to get rid of those preferentially)
+    -- So yes, this is positive, even though it's a plus for the defender
+    -- Note: defenders on healing locations also got a negative damage rating above (these don't exactly cancel each other though)
+    if wesnoth.terrain_types[map[defender]].village then
+        defender_value = defender_value * (1. + 10. / attacker.max_hitpoints)
+    end
+
+    -- We also add a few contributions that are not directly attack/damage dependent
+    -- These are added to the defender rating for two reasons:
+    --   1. Defender rating is positive (and thus contributions can be made positive)
+    --   2. It is then independent of value of aggression (cfg.own_value_weight)
+    --
+    -- These are kept small though, so they mostly only serve as tie breakers
+    -- And yes, they might bring the overall rating from slightly negative to slightly positive
+    -- or vice versa, but as that is only approximate anyway, we keep it this way for simplicity
+
+    -- We don't need a bonus for good terrain for the attacker, as that is covered in the damage calculation
+    -- However, we add a small bonus for good terrain defense of the _defender_ on the _attack_ hex
+    -- This is in order to take good terrain away from defender on next move, all else being equal
+    local defender_defense = - (100 - defender:defense_on(map[dst])) / 100.
+    defender_value = defender_value + defender_defense * defense_weight
+
+    local attacker_defense = attacker:defense_on(dst) / 100.
+    attacker_rating = attacker_rating + attacker_defense * defense_weight
+
+    -- Get a very small bonus for hexes in between defender and AI leader
+    -- 'relative_distances' is larger for attack hexes closer to the side leader (possible values: -1 .. 1)
+    if leader then
+        local relative_distances =
+            M.distance_between(defender.x, defender.y, leader.x, leader.y)
+            - M.distance_between(dst[1], dst[2], leader.x, leader.y)
+        defender_value = defender_value + relative_distances * distance_leader_weight
+    end
+
+    -- Add a very small penalty for attack hexes occupied by other units
+    -- Note: it must be checked previously that the unit on the hex can move away
+    if (dst[1] ~= attacker.x) or (dst[2] ~= attacker.y) then
+        if wesnoth.units.get(dst[1], dst[2]) then
+            defender_value = defender_value + occupied_hex_penalty
+        end
+    end
+
+    local close_enemies = #wesnoth.units.find_on_map({{ "filter_side", {{"enemy_of",{side=attacker.side}}}},{ "filter_location", {x=attacker.x,y=attacker.y,radius=2}}}) + #wesnoth.units.find_on_map({{ "filter_side", {{"enemy_of",{side=attacker.side}}}},{ "filter_location", {x=attacker.x,y=attacker.y,radius=1}}})
+    attacker_rating = attacker_rating - ((close_enemies - 6) * 0.001)
+    std_print(close_enemies)
+
 
     local defender_rating = value_fraction * defender_value
 

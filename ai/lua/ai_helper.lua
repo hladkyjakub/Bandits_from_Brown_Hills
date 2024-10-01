@@ -2323,7 +2323,7 @@ function ai_helper.get_attacks_ranged_included(units, cfg)
         local weapon_ranges = {}
         for i,weapon in ipairs(unit.attacks) do
             weapon_ranges[i] = {weapon.__cfg.max_range,weapon.__cfg.min_range}
-        end 
+        end
         local reach
         if reaches:get(unit.x, unit.y) then
             reach = reaches:get(unit.x, unit.y)
@@ -2333,11 +2333,20 @@ function ai_helper.get_attacks_ranged_included(units, cfg)
         end
         for _,loc in ipairs(reach) do
             local enemy_filter = {{"false",{}}}
+            local enemy_in_reach = {}
+            local found = {}
             for i,range in ipairs(weapon_ranges) do
-                table.insert(enemy_filter, {"or",{{ "filter_location", {x=loc[1],y=loc[2],radius=range[1]}},{"not",{{  "filter_location", {x=loc[1],y=loc[2],radius=(range[2] - 1)}}}}}})
+                local enemies = wesnoth.units.find_on_map({{ "filter_side", {{"enemy_of",{side=unit.side}}}},{ "filter_location", {x=loc[1],y=loc[2],radius=range[1]}},{"not",{{  "filter_location", {x=loc[1],y=loc[2],radius=(range[2] - 1)}}}}})
+                for i2,enemy in ipairs(enemies)do
+                    local hash = tostring(enemy)
+                    if not found[hash] then
+                        found[hash] = true
+                        table.insert(enemy_in_reach, enemy)
+                    end
+                end
+                --TODO get rid of multiple same enemies
             end
-            local enemy_in_reach = wesnoth.units.find_on_map({{ "filter_side", {{"enemy_of",{side=unit.side}}}},{"and", enemy_filter}})
-            BfBH.table.std_print({{ "filter_side", {{"enemy_of",{side=unit.side}}}},{"and", enemy_filter}})
+            --BfBH.table.std_print(enemy_in_reach)
             if #enemy_in_reach ~= 0 then
                 local add_target = true
                 local attack_hex_occupied = false
