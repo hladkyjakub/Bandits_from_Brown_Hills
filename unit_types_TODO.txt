@@ -40,7 +40,6 @@ If Ranger donesn't attack by the end of the turn, lay down a trap, dealing 10 da
 Grand mashall -> + 25% damage boost for all allies (negate the caves Tod)
 Grand Knight  -> + 1 move for all allies (boost in caves)
 
-(Lieutenant) (sergeant isn't in game, he has leadership already... feels enought for me?)
 (Cavalryman, Dragoon,Cavalier)
 (Dwarvish Runesmith, Dwarvish Runemaster, Dwarvish Arcanister)
 (Peasant, Woodsman)
