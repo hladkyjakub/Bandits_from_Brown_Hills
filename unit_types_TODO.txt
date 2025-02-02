@@ -1,48 +1,100 @@
-Bandit, Highwayman,                     #tank/support (comrade in arm)
-Ranger,                                 #terrain-related
+# {ABILITY_DAUNTLESS} This unit's resistances are doubled, up to a maximum of 50%, when attacking
+# {ABILITY_BOLD} This unit's vulnerabilities are halved when attacking."
+# {ABILITY_SKILLED} This unit always has a minimum 50% chance to hit
+# {ABILITY_VERY_SKILLED} This unit always has a minimum 60% chance to hit
+# {WEAPON_SPECIAL_RAPIDFIRE} ~~ increases strikes by 90%, but decreases accuracy by 20%.
+# {ABILITY_FORAGE} When on forest/fungus/farm/village tile, this unit heals 4 HP per turn.
+# {WEAPON_SPECIAL_BULLSEYE} When attacking at least 70% to hit
+# {WEAPON_SPECIAL_KNOCKBACK} after attack, pshes enemy one hex back
+# {WEAPON_SPECIAL_EXECUTIONERS_CHOP} #TODO increased damage against wounded enemies
 
-Dwarvish Steelclad, Dwarvish Lord,                #all rounded attacker
-Dwarvish Scout, Dwarvish Pathfinder, Dwarvish Explorer,             #Anti-ranged shock-troop? invisible in caves, mountains
-Dwarvish Sentinel,                               #TANK
-Dwarvish Thunderguard, Dwarvish Dragonguard,    #damage_dealer
+# {ABILITY_CONCENTRATED} #TODO
+# {ABILITY_PROTECTION} ~~
 
-Javelineer,                               #Defending vs melee/ranged
-Longbowman, Master Bowman,                          #damage dealer
-General, Grand Marshal,                             #Covered already, needs to implement
-Royal Guard,                       #melee tank
-Knight, Paladin, Grand Knight,                      #Shock troopers (Paladin rightenous? edit)
+# {WEAPON_SPECIAL_INK} #FOR squid + chapadlo po smrti
 
-Giant Spider,   #one OP ability // trail of Webs?/ traps
+Highwayman,                 #battle heal/field medic  one adjacent ally by 8HP when ending turn with attack left,cannot heal poisoned units, unit can be healed just once per turn
+                            "Road Warrior" - +25% resistance to all damage when on roads (and bridges and rails)
 
-Naga Fighter, Naga Myrmidon,                                                #swift naga , 2 attacks, after first attacking, give 2 moves (but weaker attacks???)
-Naga Dirkfang, Naga Ophidian, Naga Sicarius, Naga Ringcaster, Naga Zephyr,  #mixed fighter? ranged damage, tank #RAPIDFIRE
 
-Ghost, Wraith, Spectre, Shadow, Nightgaunt, # posses an enemy?
-Deathblade, Revenant, Draug,                #close tank (Deathblade damage dealer), both skeletons not sure the HP limit?
-Skeleton Archer, Bone Shooter, Banebow,     #damage dealer "Cursed Shots"?
+Giant Spider,           #one OP ability #paralyze? enemy gets its weapons disabled next time it's attacked, regenerates, skirmisher
 
-Great Wolf, Direwolf, Direwolf Rider,        #damage (pack leader on lvl 2 raider already)
+Naga Myrmidon,                                               #2 attacks, after first attacking, give 2 moves (but weaker attacks???)
+Naga Ophidian,                                      #ranged damage
+Naga Ringcaster, Naga Zephyr,               #mixed fighter,tank
 
-# 49 na listu
-# - 8 + 1
+Bone Shooter,                               #damage dealer "Cursed Shots"
+Banebow,                                       "Death Mark" Each mark reduces healing received by 15%, Spreads to adjacent units on death!
+                #long range
 
-Once per battle, when Hp drops low, enter defenzive stance, loose movement, heal a lot of HP, gain defence/evasion bonus
+
+-- limit adjacent enemies to one tile movement
+                                            #apply vulnerable +2 damage taken?
+
+Bandit,Highwayman,Longbowman,  Master Bowman,Grand Marshal,General,Knight,Grand Knight,Giant Spider,
+Naga Myrmidon,Naga Ophidian, Naga Ringcaster, Naga Zephyr,Deathblade, Revenant, Draug,Bone Shooter, Banebow,
+
+#apply some king of "poison" Numbed: -1 movement, -1 strike 2 turns? Paralyzed: -3 movement, -1 strike, Target takes 4 damage when moving
+
+# 15 na listu
+
+#FLAG
+
+#NOW #Lure, movement animation
+
+#TODO animate feed!
+
+#TODO soulreap souls not just increase damage, increase durability of unit too somehow (maybe)
+
+#TODO "Stalker" filter_sides to scroll screen for
+
+"Cleave" - different directions and attack order
+
+"Bodyguard" - swaps place with same level unit before attacked (mainly to defend generals), + resistance, if adjacent to a unit with a leadership
+
+#TODO bleed
+
+
+"Rend" - deals bonus damage to already damaged units (50%)
+
+"Time shift" - return enemy after 3 turns, dealing some extra damage (maybe as last breath, it puts enemy out from fight, enemy killing the ghost only, making final strike 3 turns after)
+
+#Tree attacks when revealed, reducing damage of enemy
+#tree Once per battle, when Hp drops low, enter defenzive stance, loose movement, heal a lot of HP, gain defence/evasion bonus
+#tree roots enemy on place?
+
+#dawn strike (morning star) + damage on dawn// whole different attack?, could stun++disarm enemy
+Adjacent units gain +1 movement point
+
+#trail of webs? No probably
+
+"Combat Mastery" Each type of weapon used grants +1 damage to next attack
+#Whenever the leader is adjacent to an allied unit that becomes wounded, the leader can use their authority to inspire the ally, temporarily boosting their morale and defense.
+#"Nimble" -10%/-20% being hit by ranged attacks
+#fury but persistent for more turns +damage done -resistance
 reduce movement of enemies starting next to this unit at start of their turn
 chance for extra attack... when nothing/1 hits?
-#heal one adjacent ally by 8HP when ending turn with attack left,cannot heal poisoned units, unit can be healed just once per turn
-feed- when kills an enemy, heal all adjacent allied wolves to the dead enemy by 15% of enemyes max HP
 lvl2/3 1/2 bonus armor
 "Pinning Strike" -immobilize defender -deatblade?
-"Nimble" -10%/-20% being hit by ranged attacks (for dwarvish scouts?)
+#terrain-related Extra damage when attacking from forest or hills OR TO
 "Ambush" - When attacking from concealment (forest, village, etc.), the Bandit/Highwayman gains a significant damage bonus and chance to inflict a random debuff (e.g. slow, disarm, bleed).
 If Ranger donesn't attack by the end of the turn, lay down a trap, dealing 10 damage upon entering (bleed?,mark?)
-"Rallying Presence" - Whenever the leader is adjacent to an allied unit that becomes wounded, the leader can use their authority to inspire the ally, temporarily boosting their morale and defense.
-Grand mashall -> + 25% damage boost for all allies (negate the caves Tod)
-Grand Knight  -> + 1 move for all allies (boost in caves)
+{WEAPON_SPECIAL_KNOCKBACK} #FOR shield bash (naga guard)?
+
+#Ability: "Sapper" (Defense bonus converts to damage)
+Rationale: Uses defensive positions offensively
+
+Longbowman,                             #WEAPON_SPECIAL_CRITICAL?
+Master Bowman,                          #damage dealer
+
+Knight,                             #Shock troop
+Grand Knight,                      #leader cavalry
+
+Grand Marshal,                             #"Strategic Command" + 25% damage boost for all allies (negate the caves Tod) /and + 1 move
+General,                                #"Rallying Banner" - Deploys a banner in adjacent hex that lasts 3 turns, healing +4 Only one banner can exist at a time. move the base bit up, ragg it
 
 (Cavalryman, Dragoon,Cavalier)
 (Dwarvish Runesmith, Dwarvish Runemaster, Dwarvish Arcanister)
-(Peasant, Woodsman)
 (Mermans)
 (Naga guard line)
 (Vampire Bat)

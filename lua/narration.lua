@@ -80,9 +80,11 @@ function wml_actions.narration( cfg )
             --     }
             -- },
             wml.tag.column {
+				horizontal_alignment = "left",
                 wml.tag.label {
                     id = "label",
-					use_markup = true
+					use_markup = true,
+					wrap = true,
                 }
             }
         }
@@ -97,6 +99,8 @@ function wml_actions.narration( cfg )
 			maximum_height = 400,
             wml.tag.row {
                 wml.tag.column {
+					grow_factor = 1,
+                    horizontal_grow = true,
                     wml.tag.toggle_panel {
                         listboxItem
                     }
@@ -246,14 +250,33 @@ function wml_actions.narration( cfg )
 												},
 												T.layer{
 													T.row {
+														grow_factor = 1,
+														vertical_grow = true,
+														T.column {
+															grow_factor = 1,
+															horizontal_grow = true,
+															listboxDefinition,
+															horizontal_alignment = "left",
+														},
 														T.column {
 															grow_factor=0,
-															listboxDefinition
+															T.spacer{
+																width =20
+															}
+														}
+													},
+													T.row {
+														grow_factor = 0,
+														T.column {
+															grow_factor=1,
+															T.spacer{
+																height =20
+															}
 														},
 														T.column {
 															grow_factor=1,
 															T.spacer{
-																width =1
+																height =20
 															}
 														}
 													}
@@ -275,6 +298,14 @@ function wml_actions.narration( cfg )
 -- 	id = "narration_message",
 -- }
 	local monsters = {
+		{ image = "units/trolls/grunt.png",
+		string = "A trolling sentence which should be longer than one line so we can see. Meooooow meow meow meow meow meow meow meow meow  meow meow meow meow  " },
+		{ image = "units/monsters/cuttlefish.png",
+		string = "A cuttlefish" },
+		{ image = "units/monsters/yeti.png",
+		string = "A yeti" },
+	}
+	local monsters_long = {
         { image = "units/trolls/grunt.png",
           string = "A troll" },
         { image = "units/monsters/cuttlefish.png",
@@ -350,8 +381,12 @@ function wml_actions.narration( cfg )
     }
 
 	--wml.get_child(wml.get_child(wml.get_child(wml.get_child(wml.get_child(def_wml, 'label_definition'), 'resolution'), 'state_enabled'), 'draw'), 'image')
-	local narration_listbox = wml.load("~add-ons/Bandits_from_Brown_Hills/gui/narration_listbox.cfg")
+	local narration_vertical_scrollbar = wml.load("~add-ons/Bandits_from_Brown_Hills/my_vertical_scrollbar.cfg")
+	gui.add_widget_definition("vertical_scrollbar", " narration_vertical_scrollbar", wml.get_child(narration_vertical_scrollbar, 'vertical_scrollbar_definition'))
+
+	local narration_listbox = wml.load("~add-ons/Bandits_from_Brown_Hills/my_listbox.cfg")
 	gui.add_widget_definition("listbox", "narration_listbox", wml.get_child(narration_listbox, 'listbox_definition'))
+
 	local def_wml_borderless = wml.load("~add-ons/Bandits_from_Brown_Hills/gui/borderless_window.cfg")
 	gui.add_widget_definition("window", "borderless_window", wml.get_child(def_wml_borderless, 'window_definition'))
 	local def_wml = wml.load("~add-ons/Bandits_from_Brown_Hills/gui/my_label.cfg")
@@ -367,18 +402,30 @@ function wml_actions.narration( cfg )
 	local function narration_preshow(dialog)
 		local listbox = dialog[listbox_id]
 		local i = 1
-        for i, monster in ipairs(monsters) do
+        for i, monster in ipairs(monsters_long) do
             -- listbox[i].monster_image.label = monster.image
-            listbox[i].label.label = "<span size='"..font_size_listbox.."' font_family='"..font_family_listbox.."' color='"..color_listbox.."' >"..monsters[i].string.."</span>"
+            listbox[i].label.label = "<span size='"..font_size_listbox.."' font_family='"..font_family_listbox.."' color='"..color_listbox.."' >"..monster.string.."</span>"
         end
 		-- listbox[i].monster_image.label = monsters[i].image
-        listbox[i].label.label = "<span size='"..font_size_listbox.."' font_family='"..font_family_listbox.."' color='"..color_listbox.."' >"..monsters[i].string.."</span>"
 		local title
 		if unit == nil then
 			title = cfg.title or  "Narrator"
 		else
 			title = cfg.title or (tostring(unit.name) ~= "" and unit.name or unit.__cfg.language_name or "")
 		end
+		if cfg.voice then
+			local speech = {
+				sounds = cfg.voice,
+				loops = 0,
+				delay = 0,
+			}
+			-- if speaker then --TODO no idea why this is in mainline, keeping as a reminder if mainline moves on :D
+			-- 	speech.x = speaker.x
+			-- 	speech.y = speaker.y
+			-- end
+			wesnoth.audio.sources.wml_message_speaker = speech
+		end
+
 		-- here set all widget starting values
 		-- for testing wml.tag.rectangle { x = 0, y = 0, w = "(width)", h = "(height)", fill_color= "0,255,0,150"}
 		-- wml.tag.text { x = 0, y = 0, w = "(width)", h = "(height)", text = message, font_size = 70, font_family = font_family_message, text_alignment = "center", text_markup = true, text_link_aware = true },
@@ -407,6 +454,7 @@ function wml_actions.narration( cfg )
 		--dialog.image_name.label = cfg.image or ""
 	end
 	local function narration_postshow(dialog)
+		wesnoth.audio.sources.wml_message_speaker = nil
 		-- here get all widget values
 	end
 	-- close_func = function close_dialog(dialog)
